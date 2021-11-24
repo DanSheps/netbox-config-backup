@@ -1,0 +1,35 @@
+{% extends 'netbox_config_backup/base.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+	<div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">
+                Backup Attributes
+            </h5>
+            <div class="card-body">
+                <table class="table table-hover">
+                    <tr>
+                        <th scope="row">Name</th>
+                        <td>{{ object.name|placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">UUID</th>
+                        <td>{{ object.uuid }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Device</th>
+                        <td>{{ object.device|placeholder }} ({{ object.device.primary_ip|placeholder }})</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+	</div>
+	<div class="col col-md-6">
+    </div>
+</div>
+<div class="row">
+    {% include 'netbox_config_backup/inc/backup_tables.html' %}
+</div>
+{% endblock %}

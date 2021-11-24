@@ -1,0 +1,16 @@
+{% extends 'netbox_config_backup/base.html' %}
+
+{% block content %}
+<div class="row">
+	<div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header">
+                Diff
+            </h5>
+            <div class="card-body">
+                <div class="change-data"><pre>{{diff}}</pre></div>
+            </div>
+        </div>
+	</div>
+</div>
+{% endblock %}

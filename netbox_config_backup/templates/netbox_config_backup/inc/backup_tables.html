@@ -1,0 +1,22 @@
+{% load render_table from django_tables2 %}
+
+<div class="col col-md-6">
+    <div class="card">
+        <h5 class="card-header">
+            Running Configurations
+        </h5>
+        <div class="card-body">
+            {% render_table running 'inc/table.html' %}
+        </div>
+    </div>
+</div>
+<div class="col col-md-6">
+    <div class="card">
+        <h5 class="card-header">
+            Startup Configurations
+        </h5>
+        <div class="card-body">
+            {% render_table startup 'inc/table.html' %}
+        </div>
+    </div>
+</div>
