@@ -8,7 +8,17 @@
                 Diff
             </h5>
             <div class="card-body">
-                <div class="change-data"><pre>{{diff}}</pre></div>
+                <pre class="change-data">{% for line in diff %}{% spaceless %}
+                    {% if line|make_list|slice:'0:3'|join:'' == '+++' or line|make_list|slice:'0:3'|join:'' == '---' %}
+                        <span>{{line}}</span>
+                    {% elif line|make_list|first == '+' %}
+                        <span class="added"> {{line|make_list|slice:'1:'|join:''}}</span>
+                    {% elif line|make_list|first == '-' %}
+                        <span class="removed"> {{line|make_list|slice:'1:'|join:''}}</span>
+                    {% else %}
+                        <span>{{line}}</span>
+                    {% endif %}
+                {% endspaceless %}{% endfor %}</pre>
             </div>
         </div>
 	</div>
