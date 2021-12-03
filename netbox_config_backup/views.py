@@ -12,9 +12,9 @@ from netbox_plugin_extensions.views.generic import PluginObjectListView, PluginO
 
 from netbox_config_backup.forms import BackupForm
 from netbox_config_backup.git import GitBackup
-from netbox_config_backup.models import Backup, BackupJob
+from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange
 from netbox_config_backup.tables import BackupTable
-from netbox_config_backup.utils import get_backup_tables
+from netbox_config_backup.utils import get_backup_tables, Differ
 
 logger = logging.getLogger(f"netbox_config_backup")
 
@@ -33,7 +33,7 @@ class BackupView(PluginObjectView):
 
         tables = get_backup_tables(instance)
 
-        jobs = BackupJob.objects.filter(backup=instance)
+        jobs = BackupJob.objects.filter(backup=instance).order_by()
         is_running = True if jobs.filter(status=JobResultStatusChoices.STATUS_RUNNING).count() > 0 else False
         is_pending = True if jobs.filter(status=JobResultStatusChoices.STATUS_PENDING).count() > 0 else False
 
@@ -74,15 +74,21 @@ class ConfigView(View):
 
         path = f'{backup.uuid}.{file}'
 
+        try:
+            bctc = BackupCommitTreeChange.objects.get(commit__sha=index, new__file=path)
+        except BackupCommitTreeChange.DoesNotExist:
+            bctc = None
+
         repo = GitBackup()
-        log = repo.log(path)
         config = repo.read(path, index)
 
         previous = None
-        log_index = [ind for ind in log if ind.get('sha') == index]
-        if len(log_index) > 0:
-            commit = log_index.pop(0)
-            previous = commit.get('change', {}).get('previous', None)
+        if bctc is not None and bctc.old is not None:
+            try:
+                prevbctc = BackupCommitTreeChange.objects.get(new__sha=bctc.old.sha, new__file=path)
+                previous = prevbctc.commit.sha
+            except:
+                pass
 
         return render(request, 'netbox_config_backup/config.html', {
             'object': backup,
@@ -106,44 +112,19 @@ class DiffView(View):
         repo = GitBackup()
         previous = previous if previous is not None else 'HEAD'
 
-        diff = list(repo.diff(path, previous, index))
+        if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
+            differ = Differ()
+            old = repo.read(path, previous)
+            new = repo.read(path, index)
+            diff = differ.cisco_compare(old.splitlines(), new.splitlines())
+        else:
+            diff = list(repo.diff(path, previous, index))
+        for index, line in enumerate(diff):
+            diff[index] = line.rstrip()
 
-        debug = []
-        context = []
-        depth = 0
-        lines = []
-        for line in diff:
-            # Strip one from the start
-            if line[0:1] not in ['+', '-']:
-                line = line[1:].rstrip()
-
-            if line[0:2] in ['--', '++', '!', '@@', '@ '] or line == '':
-                continue
-
-            depth = 0
-            match = re.search(r'^[+-]?(?P<depth>\s+).*', line)
-            if match is not None and match.groupdict().get('depth', None) is not None:
-                depth = len(match.groupdict().get('depth', ''))
-
-            if line[0:1] not in ['+', '-']:
-                if len(context) > 0 and depth == context[-1].get('depth', 0):
-                    context.pop(-1)
-                    context.append({'line': "".join([" "]*depth)+line, 'depth': depth})
-                elif len(context) > 0 and depth > context[-1].get('depth', 0):
-                    context.append({'line': "".join([" "]*depth)+line, 'depth': depth})
-                else:
-                    context = [{'line': "".join([" "]*depth)+line, 'depth': depth}]
-            elif line.strip() != '':
-                for prev in context:
-                    if prev.get('depth', 0) >= depth:
-                        context.pop(0)
-                        continue
-                    lines.append(context.pop(0).get('line'))
-                lines.append(line)
 
         return render(request, 'netbox_config_backup/diff.html', {
             'object': backup,
-            #'diff': lines,
             'diff': diff,
             'index': index,
             'previous': previous,
