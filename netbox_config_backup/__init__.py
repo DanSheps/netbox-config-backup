@@ -24,7 +24,7 @@ class NetboxConfigBackup(PluginConfig):
     ]
     default_settings = {
         # Frequency in seconds
-        'frequency': 60,
+        'frequency': 3600,
     }
     queues = [
         'jobs'
