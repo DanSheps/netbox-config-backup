@@ -60,3 +60,4 @@ class BackupsTable(tables.Table):
         attrs = {
             'class': 'table table-hover object-list',
         }
+        order_by = ['-date']
