@@ -8,6 +8,7 @@ from django.utils import timezone
 from django_rq import get_queue
 from rq.registry import StartedJobRegistry, ScheduledJobRegistry
 
+from dcim.choices import DeviceStatusChoices
 from extras.choices import JobResultStatusChoices
 from netbox.models import BigIDModel
 from netbox_config_backup.models.backups import Backup
@@ -130,6 +131,16 @@ class BackupJob(BigIDModel):
 
         scheduled_jobs = scheduled.get_job_ids()
         started_jobs = started.get_job_ids()
+
+        if backup.device.status in [DeviceStatusChoices.STATUS_OFFLINE,
+                                    DeviceStatusChoices.STATUS_FAILED,
+                                    DeviceStatusChoices.STATUS_INVENTORY,
+                                    DeviceStatusChoices.STATUS_PLANNED]:
+            return False
+
+        if backup.device.primary_ip is None or backup.device.platform is None or \
+                backup.device.platform.napalm_driver == '' or backup.device.platform.napalm_driver is None:
+            return False
 
         jobs = cls.objects.filter(backup=backup)
         queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
