@@ -8,7 +8,7 @@
         </a>
     </li>
 
-    {% if config %}
+    {% if index and file %}
         <li role="presentation" class="nav-item">
             <a class="nav-link {% if active_tab == 'config' %} active{% endif %}" href="{% url 'plugins:netbox_config_backup:backup_config' pk=object.pk index=index file=file %}">Config</a>
         </li>
@@ -18,11 +18,7 @@
         </li>
     {% endif %}
 
-    {% if diff %}
-        <li role="presentation" class="nav-item">
-            <a class="nav-link {% if active_tab == 'diff' %} active{% endif %}" href="{% url 'plugins:netbox_config_backup:backup_diff' pk=object.pk index=index previous=previous file=file %}">Diff</a>
-        </li>
-    {% elif previous %}
+    {% if index and file and previous %}
         <li role="presentation" class="nav-item">
             <a class="nav-link {% if active_tab == 'diff' %} active{% endif %}" href="{% url 'plugins:netbox_config_backup:backup_diff' pk=object.pk index=index previous=previous file=file %}">Diff</a>
         </li>

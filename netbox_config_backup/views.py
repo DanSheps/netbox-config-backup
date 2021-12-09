@@ -92,7 +92,7 @@ class ConfigView(View):
 
         return render(request, 'netbox_config_backup/config.html', {
             'object': backup,
-            'config': config,
+            'backup_config': config,
             'index': index,
             'previous': previous,
             'file': file,
@@ -119,8 +119,8 @@ class DiffView(View):
             diff = differ.cisco_compare(old.splitlines(), new.splitlines())
         else:
             diff = list(repo.diff(path, previous, index))
-        for index, line in enumerate(diff):
-            diff[index] = line.rstrip()
+        for idx, line in enumerate(diff):
+            diff[idx] = line.rstrip()
 
 
         return render(request, 'netbox_config_backup/diff.html', {
