@@ -25,6 +25,31 @@
                 </table>
             </div>
         </div>
+        <div class="card">
+            <h5 class="card-header">
+                Status
+            </h5>
+            <div class="card-body">
+                <table class="table table-hover">
+                    <tr>
+                        <th scope="row">Scheduled</th>
+                        <td>{{ status.scheduled | placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Last Job</th>
+                        <td>{{ status.last_job.completed | placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Last Success</th>
+                        <td>{{ status.last_success.time | placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Last Change</th>
+                        <td>{{ status.last_change.commit.time | placeholder }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
 	</div>
 	<div class="col col-md-6">
     </div>

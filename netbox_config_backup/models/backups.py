@@ -41,7 +41,7 @@ class Backup(BigIDModel):
 
     @property
     def next_attempt(self):
-        job = self.jobs.filter(status__in=['pending', 'running']).orderby('time').last()
+        job = self.jobs.filter(status__in=['pending', 'running']).order_by('scheduled').last()
         if job is not None:
             return job.scheduled
         return None
@@ -57,7 +57,7 @@ class Backup(BigIDModel):
         registry = ScheduledJobRegistry(queue=queue)
         for job_id in registry.get_job_ids():
             job = queue.fetch_job(job_id)
-            if job.description == f'backup-{self.device.pk}':
+            if self.device is not None and job.description == f'backup-{self.device.pk}':
                 registry.remove(job_id)
 
         super().delete(*args, **kwargs)

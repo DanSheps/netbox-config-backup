@@ -132,6 +132,9 @@ class BackupJob(BigIDModel):
         scheduled_jobs = scheduled.get_job_ids()
         started_jobs = started.get_job_ids()
 
+        if backup.device is None:
+            return False
+
         if backup.device.status in [DeviceStatusChoices.STATUS_OFFLINE,
                                     DeviceStatusChoices.STATUS_FAILED,
                                     DeviceStatusChoices.STATUS_INVENTORY,
@@ -185,6 +188,8 @@ class BackupJob(BigIDModel):
                     return True
         for job_id in registry.get_job_ids():
             job = queue.fetch_job(f'{job_id}')
+            if backup.device == None:
+                return False
             if job.description == f'backup-{backup.device.pk}':
                 return True
         return False
@@ -195,5 +200,5 @@ class BackupJob(BigIDModel):
         registry = ScheduledJobRegistry(queue=queue)
         for job_id in registry.get_job_ids():
             job = queue.fetch_job(f'{job.job_id}')
-            if job.description == f'backup-{backup.device.pk}':
+            if backup.device is not None and job.description == f'backup-{backup.device.pk}':
                 registry.remove(f'{job_id}')

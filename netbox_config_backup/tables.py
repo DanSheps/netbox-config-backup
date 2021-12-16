@@ -31,7 +31,7 @@ class BackupTable(BaseTable):
     pk = ToggleColumn()
     name = tables.Column(
         linkify=True,
-        verbose_name='ID'
+        verbose_name='Backup Name'
     )
     device = tables.Column(
         linkify={

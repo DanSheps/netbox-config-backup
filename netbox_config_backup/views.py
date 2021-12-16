@@ -1,5 +1,4 @@
 import logging
-import re
 
 from django.http import HttpResponseNotFound
 from django.shortcuts import get_object_or_404, render
@@ -12,7 +11,7 @@ from netbox_plugin_extensions.views.generic import PluginObjectListView, PluginO
 
 from netbox_config_backup.forms import BackupForm
 from netbox_config_backup.git import GitBackup
-from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange
+from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit
 from netbox_config_backup.tables import BackupTable
 from netbox_config_backup.utils import get_backup_tables, Differ
 
@@ -37,15 +36,23 @@ class BackupView(PluginObjectView):
         is_running = True if jobs.filter(status=JobResultStatusChoices.STATUS_RUNNING).count() > 0 else False
         is_pending = True if jobs.filter(status=JobResultStatusChoices.STATUS_PENDING).count() > 0 else False
 
-        status = None
+        job_status = None
         if is_pending:
-            status = 'Pending'
+            job_status = 'Pending'
         if is_running:
-            status = 'Running'
+            job_status = 'Running'
 
         if BackupJob.is_queued(instance) is False:
             logger.debug('Queuing Job')
-            BackupJob.enqueue(instance)
+            BackupJob.enqueue_if_needed(instance)
+
+        status = {
+            'status': job_status,
+            'scheduled': BackupJob.is_queued(instance),
+            'last_job': BackupJob.objects.filter(backup=instance, completed__isnull=False).last(),
+            'last_success': BackupCommit.objects.filter(backup=instance).last(),
+            'last_change': BackupCommitTreeChange.objects.filter(commit__backup=instance).last(),
+        }
 
         return {
             'running': tables.get('running', {}),
@@ -89,6 +96,8 @@ class ConfigView(View):
                 previous = prevbctc.commit.sha
             except:
                 pass
+
+        import pprint
 
         return render(request, 'netbox_config_backup/config.html', {
             'object': backup,

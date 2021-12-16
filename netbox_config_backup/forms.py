@@ -16,7 +16,7 @@ __all = (
 class BackupForm(BootstrapMixin, forms.ModelForm):
     device = DynamicModelChoiceField(
         label='Device',
-        required=True,
+        required=False,
         queryset=Device.objects.all(),
         query_params={
             'status': [DeviceStatusChoices.STATUS_ACTIVE],
