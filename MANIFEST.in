@@ -1,0 +1,4 @@
+include README.md
+include LICENSE
+recursive-include netbox_config_backup/templates *
+recursive-include netbox_config_backup/static *
