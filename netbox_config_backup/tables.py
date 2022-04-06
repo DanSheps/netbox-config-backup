@@ -2,17 +2,17 @@ import django_tables2 as tables
 from django_tables2.utils import Accessor
 
 from netbox_config_backup.models import Backup
-from utilities.tables import BaseTable, ToggleColumn
+from netbox.tables import columns, BaseTable
 
 
 class ActionButtonsColumn(tables.TemplateColumn):
     attrs = {'td': {'class': 'text-end text-nowrap noprint min-width'}}
     template_code = """
-    <a href="{% url 'plugins:netbox_config_backup:backup_config' pk=record.pk index=record.index file=record.file %}" class="btn btn-sm btn-outline-dark" title="Edit">
+    <a href="{% url 'plugins:netbox_config_backup:backup_config' pk=record.pk current=record.current.pk %}" class="btn btn-sm btn-outline-dark" title="Edit">
         <i class="mdi mdi-cloud-download"></i>
     </a>
     {% if record.previous %}
-        <a href="{% url 'plugins:netbox_config_backup:backup_diff' pk=record.pk index=record.index file=record.file previous=record.previous %}" class="btn btn-outline-dark btn-sm" title="Diff">
+        <a href="{% url 'plugins:netbox_config_backup:backup_diff' pk=record.pk current=record.current.pk previous=record.previous.pk %}" class="btn btn-outline-dark btn-sm" title="Diff">
             <i class="mdi mdi-file-compare"></i>
         </a>
     {% else %}
@@ -28,7 +28,7 @@ class ActionButtonsColumn(tables.TemplateColumn):
 
 
 class BackupTable(BaseTable):
-    pk = ToggleColumn()
+    pk = columns.ToggleColumn()
     name = tables.Column(
         linkify=True,
         verbose_name='Backup Name'
@@ -45,10 +45,10 @@ class BackupTable(BaseTable):
     class Meta(BaseTable.Meta):
         model = Backup
         fields = (
-            'pk', 'name', 'device', 'last_backup', 'next_attempt'
+            'pk', 'name', 'device', 'last_backup', 'next_attempt', 'backup_count'
         )
         default_columns = (
-            'pk', 'name', 'device', 'last_backup', 'next_attempt'
+            'pk', 'name', 'device', 'last_backup', 'next_attempt', 'backup_count'
         )
 
 

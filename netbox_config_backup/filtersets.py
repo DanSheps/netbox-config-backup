@@ -1,12 +1,12 @@
 import django_filters
 from django.db.models import Q
-from netbox_plugin_extensions.filtersets import PluginPrimaryModelFilterSet
 
+from netbox.filtersets import NetBoxModelFilterSet
 from dcim.models import Device
 from netbox_config_backup import models
 
 
-class BackupFilterSet(PluginPrimaryModelFilterSet):
+class BackupFilterSet(NetBoxModelFilterSet):
     q = django_filters.CharFilter(
         method='search',
         label='Search',

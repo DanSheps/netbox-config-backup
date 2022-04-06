@@ -5,26 +5,24 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from extras.choices import JobResultStatusChoices
-
-from netbox_plugin_extensions.views.generic import PluginObjectListView, PluginObjectView, PluginObjectEditView, \
-    PluginObjectDeleteView
+from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView
 
 from netbox_config_backup.forms import BackupForm
 from netbox_config_backup.git import GitBackup
-from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit
+from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit, BackupObject
 from netbox_config_backup.tables import BackupTable
 from netbox_config_backup.utils import get_backup_tables, Differ
 
 logger = logging.getLogger(f"netbox_config_backup")
 
 
-class BackupListView(PluginObjectListView):
+class BackupListView(ObjectListView):
     queryset = Backup.objects.all()
     table = BackupTable
     action_buttons = ('add',)
 
 
-class BackupView(PluginObjectView):
+class BackupView(ObjectView):
     queryset = Backup.objects.all()
     template_name = 'netbox_config_backup/device.html'
 
@@ -49,62 +47,52 @@ class BackupView(PluginObjectView):
         status = {
             'status': job_status,
             'scheduled': BackupJob.is_queued(instance),
-            'last_job': BackupJob.objects.filter(backup=instance, completed__isnull=False).last(),
-            'last_success': BackupCommit.objects.filter(backup=instance).last(),
-            'last_change': BackupCommitTreeChange.objects.filter(commit__backup=instance).last(),
+            'next_attempt': instance.next_attempt,
+            'last_job': instance.jobs.filter(completed__isnull=False).last(),
+            'last_success': instance.last_backup,
+            'last_change': instance.last_change,
         }
 
         return {
             'running': tables.get('running', {}),
             'startup': tables.get('startup', {}),
             'status': status,
-            'active_tab': 'backup',
         }
 
 
-class BackupEditView(PluginObjectEditView):
+class BackupEditView(ObjectEditView):
     queryset = Backup.objects.all()
-    model_form = BackupForm
+    form = BackupForm
 
 
-class BackupDeleteView(PluginObjectDeleteView):
+class BackupDeleteView(ObjectDeleteView):
     queryset = Backup.objects.all()
 
 
 class ConfigView(View):
     template_name = 'netbox_config_backup/config.html'
 
-    def get(self, request, pk, file, index):
+    def get(self, request, pk, current):
         backup = get_object_or_404(Backup.objects.all(), pk=pk)
-        if file not in ['running', 'startup']:
-            return HttpResponseNotFound('<h1>No valid file defined</h1>')
+        current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
 
-        path = f'{backup.uuid}.{file}'
-
-        try:
-            bctc = BackupCommitTreeChange.objects.get(commit__sha=index, new__file=path)
-        except BackupCommitTreeChange.DoesNotExist:
-            bctc = None
+        path = f'{current.file.path}'
 
         repo = GitBackup()
-        config = repo.read(path, index)
+        config = repo.read(path, current.commit.sha)
 
         previous = None
-        if bctc is not None and bctc.old is not None:
+        if current is not None and current.old is not None:
             try:
-                prevbctc = BackupCommitTreeChange.objects.get(new__sha=bctc.old.sha, new__file=path)
-                previous = prevbctc.commit.sha
+                previous = backup.changes.filter(file__type=current.file.type, commit__time__lt=current.commit.time).last()
             except:
                 pass
-
-        import pprint
 
         return render(request, 'netbox_config_backup/config.html', {
             'object': backup,
             'backup_config': config,
-            'index': index,
+            'current': current,
             'previous': previous,
-            'file': file,
             'active_tab': 'config',
         })
 
@@ -112,22 +100,23 @@ class ConfigView(View):
 class DiffView(View):
     template_name = 'netbox_config_backup/diff.html'
 
-    def get(self, request, pk, file, index, previous=None):
+    def get(self, request, pk, current, previous=None):
         backup = get_object_or_404(Backup.objects.all(), pk=pk)
-        if file not in ['running', 'startup']:
-            return HttpResponseNotFound('<h1>No valid file defined</h1>')
+        current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+        previous = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=previous)
 
-        path = f'{backup.uuid}.{file}'
+        path = f'{current.file.path}'
+
         repo = GitBackup()
-        previous = previous if previous is not None else 'HEAD'
+        prevcommit = previous.commit if previous.commit is not None else 'HEAD'
 
         if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
             differ = Differ()
-            old = repo.read(path, previous)
-            new = repo.read(path, index)
+            new = repo.read(path, current.commit.sha)
+            old = repo.read(path, previous.commit.sha)
             diff = differ.cisco_compare(old.splitlines(), new.splitlines())
         else:
-            diff = list(repo.diff(path, previous, index))
+            diff = list(repo.diff(path, prevcommit, current.commit.sha))
         for idx, line in enumerate(diff):
             diff[idx] = line.rstrip()
 
@@ -135,8 +124,7 @@ class DiffView(View):
         return render(request, 'netbox_config_backup/diff.html', {
             'object': backup,
             'diff': diff,
-            'index': index,
+            'current': current,
             'previous': previous,
-            'file': file,
             'active_tab': 'diff',
         })

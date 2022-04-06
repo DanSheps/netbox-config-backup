@@ -20,7 +20,11 @@
                     </tr>
                     <tr>
                         <th scope="row">Device</th>
-                        <td>{{ object.device|placeholder }} ({{ object.device.primary_ip|placeholder }})</td>
+                        {% if object.device %}
+                            <td><a href="{% url 'dcim:device' pk=object.device.pk %}">{{ object.device|placeholder }}</a> ({{ object.device.primary_ip|placeholder }})</td>
+                        {% else %}
+                            <td>{{ object.device|placeholder }} ({{ object.device.primary_ip|placeholder }})</td>
+                        {% endif %}
                     </tr>
                 </table>
             </div>
@@ -33,7 +37,7 @@
                 <table class="table table-hover">
                     <tr>
                         <th scope="row">Scheduled</th>
-                        <td>{{ status.scheduled | placeholder }}</td>
+                        <td>{{ status.scheduled | placeholder }}{% if status.scheduled %} ({{status.next_attempt}}){% endif %}</td>
                     </tr>
                     <tr>
                         <th scope="row">Last Job</th>
@@ -41,11 +45,11 @@
                     </tr>
                     <tr>
                         <th scope="row">Last Success</th>
-                        <td>{{ status.last_success.time | placeholder }}</td>
+                        <td>{{ status.last_success | placeholder }}</td>
                     </tr>
                     <tr>
                         <th scope="row">Last Change</th>
-                        <td>{{ status.last_change.commit.time | placeholder }}</td>
+                        <td>{{ status.last_change | placeholder }}</td>
                     </tr>
                 </table>
             </div>

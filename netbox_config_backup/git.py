@@ -1,6 +1,7 @@
 import os
 import difflib
 from datetime import datetime
+from time import sleep
 
 from dulwich import repo, porcelain, object_store
 from pydriller import Git
@@ -48,7 +49,18 @@ class GitBackup:
         with open(path, 'w') as f:
             f.write(data)
             f.close()
-        porcelain.add(self.repository, path)
+
+        failures = 0
+        while failures < 10:
+            try:
+                porcelain.add(self.repository, path)
+                return
+            except FileExistsError:
+                sleep(1)
+                failures = failures + 1
+                if failures >= 10:
+                    raise Exception('Unable to acquire lock on repository in a timely manner')
+
 
     def commit(self, message):
         committer = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('committer', None)
@@ -59,8 +71,16 @@ class GitBackup:
         if committer is not None:
             committer = committer.encode('ascii')
 
-        commit = porcelain.commit(self.repository, message, committer=committer, author=author)
-        return commit.decode('ascii')
+        failures = 0
+        while failures < 10:
+            try:
+                commit = porcelain.commit(self.repository, message, committer=committer, author=author)
+                return commit.decode('ascii')
+            except FileExistsError:
+                sleep(1)
+                failures = failures + 1
+                if failures >= 10:
+                    raise Exception('Unable to acquire lock on repository in a timely manner')
 
     def read(self, file, index=None):
         path = file.encode('ascii')
