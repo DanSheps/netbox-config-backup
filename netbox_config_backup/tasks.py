@@ -9,6 +9,7 @@ from django_rq import job
 from extras.choices import JobResultStatusChoices
 from netbox import settings
 from netbox.api.exceptions import ServiceUnavailable
+from netbox.config import get_config
 from netbox_config_backup.models import Backup, BackupJob, BackupCommit
 
 
@@ -25,10 +26,11 @@ def get_logger():
 
 
 def napalm_init(device, extra_args={}):
-    username = settings.NAPALM_USERNAME
-    password = settings.NAPALM_PASSWORD
-    timeout = settings.NAPALM_TIMEOUT
-    optional_args = settings.NAPALM_ARGS.copy()
+    config = get_config()
+    username = config.NAPALM_USERNAME
+    password = config.NAPALM_PASSWORD
+    timeout = config.NAPALM_TIMEOUT
+    optional_args = config.NAPALM_ARGS.copy()
     if device.platform.napalm_args is not None:
         optional_args.update(device.platform.napalm_args)
     if extra_args != {}:
@@ -64,7 +66,7 @@ def napalm_init(device, extra_args={}):
         hostname=host,
         username=username,
         password=password,
-        timeout=settings.NAPALM_TIMEOUT,
+        timeout=timeout,
         optional_args=optional_args
     )
     try:
@@ -114,11 +116,13 @@ def backup_job(pk):
         try:
             BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
         except Exception as e:
+            logger.error(traceback.format_exc())
             logger.error(e)
             job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
     except Exception as e:
+        logger.error(traceback.format_exc())
         logger.error(e)
-        traceback.print_exc()
+
         job_result.set_status(JobResultStatusChoices.STATUS_FAILED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 

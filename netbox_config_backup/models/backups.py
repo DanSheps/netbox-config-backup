@@ -1,18 +1,21 @@
 import logging
+import datetime
 import uuid as uuid
 
 from django.db import models
 from django.urls import reverse
 
 from django_rq import get_queue
-from django_rq import get_queue
 from rq.registry import ScheduledJobRegistry
 
 from dcim.models import Device
-from netbox.models import BigIDModel
+from extras.choices import JobResultStatusChoices
+
 from netbox_config_backup.choices import FileTypeChoices, CommitTreeChangeTypeChoices
 from netbox_config_backup.helpers import get_repository_dir
 from utilities.querysets import RestrictedQuerySet
+
+from .abstract import BigIDModel
 
 logger = logging.getLogger(f"netbox_config_backup")
 
@@ -34,9 +37,9 @@ class Backup(BigIDModel):
 
     @property
     def last_backup(self):
-        commit = self.commits.last()
-        if commit is not None:
-            return commit.time
+        job = self.jobs.filter(status=JobResultStatusChoices.STATUS_COMPLETED).order_by('completed').last()
+        if job is not None:
+            return job.completed
         return None
 
     @property
@@ -45,6 +48,16 @@ class Backup(BigIDModel):
         if job is not None:
             return job.scheduled
         return None
+
+    @property
+    def last_change(self):
+        if self.changes.count() == 0:
+            return None
+        return self.changes.last().commit.time
+
+    @property
+    def backup_count(self):
+        return self.changes.count()
 
     def get_absolute_url(self):
         return reverse('plugins:netbox_config_backup:backup', args=[self.pk])
@@ -62,6 +75,14 @@ class Backup(BigIDModel):
 
         super().delete(*args, **kwargs)
 
+    def enqueue_if_needed(self):
+        from netbox_config_backup.utils import enqueue_if_needed
+        enqueue_if_needed(self)
+
+    def requeue(self):
+        self.jobs.all().delete()
+        self.enqueue_if_needed()
+
     def get_config(self, index='HEAD'):
         from netbox_config_backup.git import repository
         running = repository.read(f'{self.uuid}.running')
@@ -71,6 +92,7 @@ class Backup(BigIDModel):
 
     def set_config(self, configs, files=('running', 'startup')):
         from netbox_config_backup.git import repository
+        LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
         for file in files:
             running = repository.write(f'{self.uuid}.{file}', configs.get(file))
@@ -79,31 +101,36 @@ class Backup(BigIDModel):
 
         log = repository.log(index=commit, depth=1)[0]
 
-        bc = BackupCommit.objects.filter(backup=self, sha=commit)
+        bc = BackupCommit.objects.filter(sha=commit)
+        time = log.get('time', datetime.datetime.now()).replace(tzinfo=LOCAL_TIMEZONE)
         if bc.count() > 0:
             raise Exception('Commit already exists for this backup and sha value')
         else:
-            bc = BackupCommit(backup=self, sha=commit, time=log.get('time'))
+            bc = BackupCommit(sha=commit, time=time)
             logger.info(f'{commit}:{bc.time}')
             bc.save()
 
         for change in log.get('changes', []):
+            backupfile = None
             change_data = {}
             for key in ['old', 'new']:
                 sha = change.get(key, {}).get('sha', None)
                 file = change.get(key, {}).get('path', None)
                 if sha is not None and file is not None:
-                    object = BackupObject.objects.filter(sha=sha, file=file)
-                    if object.count() > 1:
-                        raise Exception('Commit log integrity error')
-                    elif object.count() == 1:
-                        object = object.first()
-                    else:
-                        object = BackupObject(sha=sha, file=file)
-                        object.save()
+                    uuid, type = file.split('.')
+                    try:
+                        object = BackupObject.objects.get(sha=sha)
+                    except BackupObject.DoesNotExist:
+                        object = BackupObject.objects.create(sha=sha)
+                    try:
+                        backupfile = BackupFile.objects.get(backup=self, type=type)
+                    except BackupFile.DoesNotExist:
+                        backupfile = BackupFile.objects.create(backup=self, type=type)
                     change_data[key] = object
 
             bctc = BackupCommitTreeChange.objects.filter(
+                backup=self,
+                file=backupfile,
                 commit=bc,
                 type=change.get('type', None),
                 old=change_data.get('old', None),
@@ -113,6 +140,8 @@ class Backup(BigIDModel):
                 bctc = bctc.first()
             elif bctc.count() == 0:
                 bctc = BackupCommitTreeChange(
+                    backup=self,
+                    file=backupfile,
                     commit=bc,
                     type=change.get('type', None),
                     old=change_data.get('old', None),
@@ -123,95 +152,55 @@ class Backup(BigIDModel):
         return commit
 
     @classmethod
-    def rebuild_commit_database(cls):
-        from netbox_config_backup.git import repository
-
-        def save_change(bc, change):
-            change_data = {}
-            for key in ['old', 'new']:
-                sha = change.get(key, {}).get('sha', None)
-                file = change.get(key, {}).get('path', None)
-                if sha is not None and file is not None:
-                    try:
-                        object = BackupObject.objects.get(sha=sha, file=file)
-                    except BackupObject.DoesNotExist:
-                        object = BackupObject(sha=sha, file=file)
-                        object.save()
-                    change_data[key] = object
-
-            try:
-                bctc = BackupCommitTreeChange.objects.get(
-                    commit=bc,
-                    type=change.get('type', None),
-                    old=change_data.get('old', None),
-                    new=change_data.get('new', None)
-                )
-            except BackupCommitTreeChange.DoesNotExist:
-                bctc = BackupCommitTreeChange(
-                    commit=bc,
-                    type=change.get('type', None),
-                    old=change_data.get('old', None),
-                    new=change_data.get('new', None)
-                )
-                bctc.save()
-
-        backups = Backup.objects.all()
-        for backup in backups:
-            paths = []
-            for file in ['running', 'startup']:
-                paths.append(f'{backup.uuid}.{file}')
-            logs = reversed(repository.log(paths=paths))
-            for entry in logs:
-                try:
-                    bc = BackupCommit.objects.get(sha=entry.get('sha', None))
-                    if bc.time is None or (entry.get('time') is not None and bc.time != entry.get('time')):
-                        bc.time = entry.get('time')
-                        bc.save()
-                except BackupCommit.DoesNotExist:
-                    bc = BackupCommit(backup=backup, sha=entry.get('sha', None), time=entry.get('time'))
-                    bc.save()
-                for change in entry.get('changes', []):
-                    save_change(bc, change)
-
-
-    @classmethod
     def get_repository_dir(cls):
         return get_repository_dir()
 
 
 class BackupCommit(BigIDModel):
-    backup = models.ForeignKey(to=Backup, on_delete=models.SET_NULL, null=True, blank=False, related_name='commits')
     sha = models.CharField(max_length=64)
-    time = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                name='backup_and_sha_not_null',
-                check=(models.Q(backup__isnull=False, sha__isnull=False))
-            )
-        ]
+    time = models.DateTimeField()
 
     def __str__(self):
         return self.sha
 
 
 class BackupObject(BigIDModel):
-    sha = models.CharField(max_length=64)
-    file = models.CharField(max_length=255)
-
-    class Meta:
-        unique_together = ['sha', 'file']
+    sha = models.CharField(max_length=64, unique=True)
 
     def __str__(self):
-        return f'{self.sha}({self.file})'
+        return f'{self.sha}'
+
+
+class BackupFile(BigIDModel):
+    backup = models.ForeignKey(to=Backup, on_delete=models.CASCADE, null=False, blank=False, related_name='files')
+    type = models.CharField(max_length=10, choices=FileTypeChoices, null=False, blank=False)
+
+    class Meta:
+        unique_together = ['backup', 'type']
+
+    def __str__(self):
+        return f'{self.sha}'
+
+    @property
+    def name(self):
+        return f'{self.backup.uuid}'
+
+    @property
+    def path(self):
+        return f'{self.name}.{self.type}'
 
 
 class BackupCommitTreeChange(BigIDModel):
+    backup = models.ForeignKey(to=Backup, on_delete=models.CASCADE, null=False, blank=False, related_name='changes')
+    file = models.ForeignKey(to=BackupFile, on_delete=models.CASCADE, null=False, blank=False, related_name='changes')
+
     commit = models.ForeignKey(to=BackupCommit, on_delete=models.PROTECT, related_name='changes')
     type = models.CharField(max_length=10)
     old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True)
-    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='new', null=True)
+    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True)
 
     def __str__(self):
         return f'{self.commit.sha}-{self.type}'
+
+    def filename(self):
+        return f'{self.backup.uuid}.{self.type}'

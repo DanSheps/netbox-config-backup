@@ -1,8 +1,19 @@
 import difflib
 import re
+import logging
+import uuid as uuid
 
-from netbox_config_backup.models import BackupCommitTreeChange
+from django.db.models import Q
+from django.utils import timezone
+from django_rq import get_queue
+from rq.registry import ScheduledJobRegistry
+
+from dcim.choices import DeviceStatusChoices
+from extras.choices import JobResultStatusChoices
+from netbox_config_backup.models import BackupCommitTreeChange, BackupJob
 from netbox_config_backup.tables import BackupsTable
+
+logger = logging.getLogger(f"netbox_config_backup")
 
 
 class Differ(difflib.Differ):
@@ -70,33 +81,169 @@ class Differ(difflib.Differ):
 
 
 def get_backup_tables(instance):
-    def get_backup_table(data, file):
+    def get_backup_table(data):
         backups = []
         for row in data:
             commit = row.commit
-            previous = None
-            if row.old is not None:
-                try:
-                    previous = BackupCommitTreeChange.objects.filter(new=row.old).first().commit.sha
-                except AttributeError:
-                    pass
-            backup = {'pk': instance.pk, 'date': commit.time, 'index': commit.sha, 'previous': previous, 'file': file}
+            current = row
+            previous = row.backup.changes.filter(file__type=row.file.type, commit__time__lt=commit.time).last()
+            backup = {'pk': instance.pk, 'date': commit.time, 'current': current, 'previous': previous}
             backups.append(backup)
 
         table = BackupsTable(backups)
         return table
 
-    bc = BackupCommitTreeChange.objects.filter(commit__backup__pk=instance.pk).prefetch_related('old', 'new', 'commit')
-    changes = {
-        'running': bc.filter(new__file__endswith='running'),
-        'startup': bc.filter(new__file__endswith='startup')
-    }
+    backups = BackupCommitTreeChange.objects.filter(backup=instance).order_by('commit__time')
 
     tables = {}
     for file in ['running', 'startup']:
         try:
-            tables.update({file: get_backup_table(changes.get(file, []), file)})
+            tables.update({file: get_backup_table(backups.filter(file__type=file))})
         except KeyError:
-            tables.update({file: get_backup_table([], file)})
+            tables.update({file: get_backup_table([])})
 
     return tables
+
+
+def enqueue(backup, delay=None):
+    from netbox_config_backup.models import BackupJob
+
+    scheduled = timezone.now()
+    if delay is not None:
+        logger.info(f'Scheduling for: {scheduled + delay} at {scheduled} ')
+        scheduled = timezone.now() + delay
+
+    result = BackupJob.objects.create(
+        backup=backup,
+        job_id=uuid.uuid4(),
+        scheduled=scheduled,
+    )
+    queue = get_queue('netbox_config_backup.jobs')
+    if delay is None:
+        logger.debug('Enqueued')
+        job = queue.enqueue(
+            'netbox_config_backup.tasks.backup_job',
+            description=f'backup-{backup.device.pk}',
+            job_id=str(result.job_id),
+            pk=result.pk
+        )
+        logger.info(result.job_id)
+    else:
+        logger.debug('Enqueued')
+        job = queue.enqueue_in(
+            delay,
+            'netbox_config_backup.tasks.backup_job',
+            description=f'backup-{backup.device.pk}',
+            job_id=str(result.job_id),
+            pk=result.pk
+        )
+        logger.info(result.job_id)
+
+    return job
+
+
+def enqueue_if_needed(backup, delay=None, job_id=None):
+    if needs_enqueue(backup, job_id=job_id):
+        enqueue(backup, delay=delay)
+
+
+def needs_enqueue(backup, job_id=None):
+    queue = get_queue('netbox_config_backup.jobs')
+    scheduled = queue.scheduled_job_registry
+    started = queue.started_job_registry
+
+    scheduled_jobs = scheduled.get_job_ids()
+    started_jobs = started.get_job_ids()
+
+    if backup.device is None:
+        print('Device')
+        return False
+
+    if backup.device.status in [DeviceStatusChoices.STATUS_OFFLINE,
+                                DeviceStatusChoices.STATUS_FAILED,
+                                DeviceStatusChoices.STATUS_INVENTORY,
+                                DeviceStatusChoices.STATUS_PLANNED]:
+        print('Status')
+        return False
+
+    if backup.device.primary_ip is None or backup.device.platform is None or \
+            backup.device.platform.napalm_driver == '' or backup.device.platform.napalm_driver is None:
+        print('Napalm')
+        return False
+
+    if is_queued(backup, job_id):
+        print('Queued')
+        return False
+
+    return True
+
+
+def is_running(backup, job_id=None):
+    queue = get_queue('netbox_config_backup.jobs')
+
+    jobs = backup.jobs.all()
+    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
+
+    if job_id is not None:
+        queued.exclude(job_id=job_id)
+
+    for backupjob in queued.all():
+        job = queue.fetch_job(f'{backupjob.job_id}')
+        if job and job.is_started and job.id in queue.started_job_registry.get_job_ids():
+            return True
+        elif job and job.is_started and job.id not in queue.started_job_registry.get_job_ids():
+            job.cancel()
+            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.save()
+            logger.warning(f'Job in queue but not in a registry, cancelling')
+        elif job and job.is_canceled:
+            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.save()
+    return False
+
+
+def is_queued(backup, job_id=None):
+    queue = get_queue('netbox_config_backup.jobs')
+
+    scheduled_jobs = queue.scheduled_job_registry.get_job_ids()
+    started_jobs = queue.started_job_registry.get_job_ids()
+
+    jobs = backup.jobs.all()
+    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
+
+    if job_id is not None:
+        queued.exclude(job_id=job_id)
+
+    for backupjob in queued.all():
+        job = queue.fetch_job(f'{backupjob.job_id}')
+        if job and (job.is_scheduled or job.is_queued) and job.id in scheduled_jobs + started_jobs:
+                return True
+        elif job and (job.is_scheduled or job.is_queued) and job.id not in scheduled_jobs + started_jobs:
+            job.cancel()
+            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.save()
+            logger.warning(f'Job in queue but not in a registry, cancelling')
+        elif job and job.is_canceled:
+            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.save()
+    return False
+
+
+def remove_orphaned(cls):
+    queue = get_queue('netbox_config_backup.jobs')
+    registry = ScheduledJobRegistry(queue=queue)
+
+    for job_id in registry.get_job_ids():
+        try:
+            BackupJob.objects.get(job_id=job_id)
+        except BackupJob.DoesNotExist:
+            registry.remove(job_id)
+
+
+def remove_queued(cls, backup):
+    queue = get_queue('netbox_config_backup.jobs')
+    registry = ScheduledJobRegistry(queue=queue)
+    for job_id in registry.get_job_ids():
+        job = queue.fetch_job(f'{job_id}')
+        if backup.device is not None and job.description == f'backup-{backup.device.pk}':
+            registry.remove(f'{job_id}')

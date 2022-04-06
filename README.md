@@ -25,7 +25,6 @@ A configuration backup system using netbox and napalm to backup devices into a g
 2. Edit netbox configuration:
 ```pyython
 PLUGINS = [
-    'netbox_plugin_extensions',
     'netbox_config_backup',
     # Other plugins here
 ]
