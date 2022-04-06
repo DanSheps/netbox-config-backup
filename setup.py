@@ -16,7 +16,6 @@ setup(
         'uuid',
         'dulwich',
         'pydriller',
-        'netbox-plugin-extensions'
     ],
     packages=find_packages(),
     include_package_data=True,
