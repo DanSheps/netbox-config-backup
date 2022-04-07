@@ -16,6 +16,7 @@ from netbox_config_backup.helpers import get_repository_dir
 from utilities.querysets import RestrictedQuerySet
 
 from .abstract import BigIDModel
+from netbox_config_backup.utils.rq import remove_queued
 
 logger = logging.getLogger(f"netbox_config_backup")
 
@@ -25,6 +26,12 @@ class Backup(BigIDModel):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)
     device = models.ForeignKey(
         to=Device,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True
+    )
+    ip = models.ForeignKey(
+        to='ipam.IPAddress',
         on_delete=models.SET_NULL,
         blank=True,
         null=True
@@ -67,16 +74,12 @@ class Backup(BigIDModel):
 
     def delete(self, *args, **kwargs):
         queue = get_queue('netbox_config_backup.jobs')
-        registry = ScheduledJobRegistry(queue=queue)
-        for job_id in registry.get_job_ids():
-            job = queue.fetch_job(job_id)
-            if self.device is not None and job.description == f'backup-{self.device.pk}':
-                registry.remove(job_id)
+        remove_queued(self)
 
         super().delete(*args, **kwargs)
 
     def enqueue_if_needed(self):
-        from netbox_config_backup.utils import enqueue_if_needed
+        from netbox_config_backup.utils.rq import enqueue_if_needed
         enqueue_if_needed(self)
 
     def requeue(self):
@@ -97,7 +100,7 @@ class Backup(BigIDModel):
         for file in files:
             running = repository.write(f'{self.uuid}.{file}', configs.get(file))
 
-        commit = repository.commit(f'Backup of {self.device.name}')
+        commit = repository.commit(f'Backup of {self.device.name} for backup {self.name}')
 
         log = repository.log(index=commit, depth=1)[0]
 
