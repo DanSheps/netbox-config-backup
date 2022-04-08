@@ -51,7 +51,8 @@ def enqueue(backup, delay=None):
 
 def enqueue_if_needed(backup, delay=None, job_id=None):
     if needs_enqueue(backup, job_id=job_id):
-        enqueue(backup, delay=delay)
+        return enqueue(backup, delay=delay)
+    return False
 
 
 def needs_enqueue(backup, job_id=None):
@@ -109,7 +110,7 @@ def is_running(backup, job_id=None):
     return False
 
 
-def is_queued(backup, job_id=None):
+def get_scheduled(backup, job_id=None):
     queue = get_queue('netbox_config_backup.jobs')
 
     scheduled_jobs = queue.scheduled_job_registry.get_job_ids()
@@ -124,7 +125,10 @@ def is_queued(backup, job_id=None):
     for backupjob in queued.all():
         job = queue.fetch_job(f'{backupjob.job_id}')
         if job and (job.is_scheduled or job.is_queued) and job.id in scheduled_jobs + started_jobs:
-                return True
+            if job.enqueued_at is not None:
+                return queue.scheduled_job_registry.get_scheduled_time(job)
+            else:
+                return job.enqueued_at
         elif job and (job.is_scheduled or job.is_queued) and job.id not in scheduled_jobs + started_jobs:
             job.cancel()
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
@@ -133,6 +137,11 @@ def is_queued(backup, job_id=None):
         elif job and job.is_canceled:
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
             backupjob.save()
+
+
+def is_queued(backup, job_id=None):
+    if get_scheduled(backup, job_id) is not None:
+        return True
     return False
 
 

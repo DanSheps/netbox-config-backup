@@ -80,7 +80,7 @@ class Backup(BigIDModel):
 
     def enqueue_if_needed(self):
         from netbox_config_backup.utils.rq import enqueue_if_needed
-        enqueue_if_needed(self)
+        return enqueue_if_needed(self)
 
     def requeue(self):
         self.jobs.all().delete()
