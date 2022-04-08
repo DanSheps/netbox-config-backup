@@ -15,15 +15,7 @@ body:
       label: Plugin version
       description: >
         What version of the plugin are you running?
-      placeholder: v1.0.6
-    validations:
-      required: true
-  - type: input
-    attributes:
-      label: netbox-plugin-extensions version
-      description: >
-        What version of the netbox-plugin-extensions are you running?
-      placeholder: v1.0.2
+      placeholder: v1.2.2
     validations:
       required: true
   - type: input
@@ -33,7 +25,7 @@ body:
         What version of NetBox are you currently running? (If you don't have access to the most
         recent NetBox release, consider testing on our [demo instance](https://demo.netbox.dev/)
         before opening a bug report to see if your issue has already been addressed.)
-      placeholder: v3.0.3
+      placeholder: v3.2.0
     validations:
       required: true
   - type: dropdown
@@ -41,7 +33,6 @@ body:
       label: Python version
       description: What version of Python are you currently running?
       options:
-        - 3.7
         - 3.8
         - 3.9
     validations:

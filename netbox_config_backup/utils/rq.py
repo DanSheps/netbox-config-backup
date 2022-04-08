@@ -1,108 +1,15 @@
-import difflib
-import re
 import logging
-import uuid as uuid
 
-from django.db.models import Q
+import uuid
 from django.utils import timezone
 from django_rq import get_queue
 from rq.registry import ScheduledJobRegistry
 
 from dcim.choices import DeviceStatusChoices
 from extras.choices import JobResultStatusChoices
-from netbox_config_backup.models import BackupCommitTreeChange, BackupJob
-from netbox_config_backup.tables import BackupsTable
+from netbox_config_backup.models.jobs import BackupJob
 
 logger = logging.getLogger(f"netbox_config_backup")
-
-
-class Differ(difflib.Differ):
-    def plain_compare(self, a, b):
-        """
-        Use plain replace instead of fancy replace
-        :param a:
-        :param b:
-        :return:
-        """
-
-        cruncher = difflib.SequenceMatcher(self.linejunk, a, b)
-        for tag, alo, ahi, blo, bhi in cruncher.get_opcodes():
-            if tag == 'replace':
-                g = self._plain_replace(a, alo, ahi, b, blo, bhi)
-            elif tag == 'delete':
-                g = self._dump('-', a, alo, ahi)
-            elif tag == 'insert':
-                g = self._dump('+', b, blo, bhi)
-            elif tag == 'equal':
-                g = self._dump(' ', a, alo, ahi)
-            else:
-                raise ValueError('unknown tag %r' % (tag,))
-
-            yield from g
-
-    def cisco_compare(self, a, b, text=True):
-        diff = list(self.plain_compare(a, b))
-        output = []
-        context = []
-        for row in diff:
-            mode = row[0:1] if row[0:1] in ['+', '-'] else ''
-            line = row[2:]
-
-            match = re.search(r'^(?P<depth>\s*).*', line)
-            if match is not None:
-                depth = len(match.groupdict().get('depth', ''))
-            else:
-                depth = 0
-
-            ctx = {'line': line, 'depth': depth}
-            if mode in ['+', '-']:
-                context = list(filter(lambda x: x.get('depth') < depth, context))
-                while len(context) > 0:
-                    if text is True:
-                        output.append(f'  {context.pop(0).get("line", "")}')
-                    else:
-                        output.append({'mode': mode, 'line': f'{context.pop(0).get("line", "")}'})
-                if text is True:
-                    output.append(f'{mode} {line}')
-                else:
-                    output.append({'mode': mode, 'line': f'{line}'})
-            elif depth == 0:
-                context = [ctx]
-            elif len(context) > 0 and depth == context[-1].get('depth'):
-                context.pop(-1)
-                context.append(ctx)
-            elif len(context) > 0 and depth > context[-1].get('depth'):
-                context.append(ctx)
-            elif len(context) > 0 and depth < context[-1].get('depth'):
-                context = list(filter(lambda x: x.get('depth') < depth, context))
-                context.append(ctx)
-
-        return output
-
-
-def get_backup_tables(instance):
-    def get_backup_table(data):
-        backups = []
-        for row in data:
-            commit = row.commit
-            current = row
-            previous = row.backup.changes.filter(file__type=row.file.type, commit__time__lt=commit.time).last()
-            backup = {'pk': instance.pk, 'date': commit.time, 'current': current, 'previous': previous}
-            backups.append(backup)
-
-        table = BackupsTable(backups)
-        return table
-
-    backups = BackupCommitTreeChange.objects.filter(backup=instance).order_by('commit__time')
-
-    tables = {}
-    for file in ['running', 'startup']:
-        try:
-            tables.update({file: get_backup_table(backups.filter(file__type=file))})
-        except KeyError:
-            tables.update({file: get_backup_table([])})
-
-    return tables
 
 
 def enqueue(backup, delay=None):
@@ -123,7 +30,7 @@ def enqueue(backup, delay=None):
         logger.debug('Enqueued')
         job = queue.enqueue(
             'netbox_config_backup.tasks.backup_job',
-            description=f'backup-{backup.device.pk}',
+            description=f'{backup.uuid}',
             job_id=str(result.job_id),
             pk=result.pk
         )
@@ -133,7 +40,7 @@ def enqueue(backup, delay=None):
         job = queue.enqueue_in(
             delay,
             'netbox_config_backup.tasks.backup_job',
-            description=f'backup-{backup.device.pk}',
+            description=f'{backup.uuid}',
             job_id=str(result.job_id),
             pk=result.pk
         )
@@ -144,7 +51,8 @@ def enqueue(backup, delay=None):
 
 def enqueue_if_needed(backup, delay=None, job_id=None):
     if needs_enqueue(backup, job_id=job_id):
-        enqueue(backup, delay=delay)
+        return enqueue(backup, delay=delay)
+    return False
 
 
 def needs_enqueue(backup, job_id=None):
@@ -166,7 +74,7 @@ def needs_enqueue(backup, job_id=None):
         print('Status')
         return False
 
-    if backup.device.primary_ip is None or backup.device.platform is None or \
+    if (backup.ip is None and backup.device.primary_ip is None) or backup.device.platform is None or \
             backup.device.platform.napalm_driver == '' or backup.device.platform.napalm_driver is None:
         print('Napalm')
         return False
@@ -182,14 +90,14 @@ def is_running(backup, job_id=None):
     queue = get_queue('netbox_config_backup.jobs')
 
     jobs = backup.jobs.all()
-    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
+    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING])
 
     if job_id is not None:
         queued.exclude(job_id=job_id)
 
     for backupjob in queued.all():
         job = queue.fetch_job(f'{backupjob.job_id}')
-        if job and job.is_started and job.id in queue.started_job_registry.get_job_ids():
+        if job and job.is_started and job.id in queue.started_job_registry.get_job_ids() + queue.get_job_ids():
             return True
         elif job and job.is_started and job.id not in queue.started_job_registry.get_job_ids():
             job.cancel()
@@ -202,11 +110,12 @@ def is_running(backup, job_id=None):
     return False
 
 
-def is_queued(backup, job_id=None):
+def get_scheduled(backup, job_id=None):
     queue = get_queue('netbox_config_backup.jobs')
 
     scheduled_jobs = queue.scheduled_job_registry.get_job_ids()
     started_jobs = queue.started_job_registry.get_job_ids()
+    queued_jobs = queue.get_job_ids()
 
     jobs = backup.jobs.all()
     queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
@@ -216,8 +125,11 @@ def is_queued(backup, job_id=None):
 
     for backupjob in queued.all():
         job = queue.fetch_job(f'{backupjob.job_id}')
-        if job and (job.is_scheduled or job.is_queued) and job.id in scheduled_jobs + started_jobs:
-                return True
+        if job and (job.is_scheduled or job.is_queued) and job.id in scheduled_jobs + started_jobs + queued_jobs:
+            if job.enqueued_at is not None:
+                return job.enqueued_at
+            else:
+                return queue.scheduled_job_registry.get_scheduled_time(job)
         elif job and (job.is_scheduled or job.is_queued) and job.id not in scheduled_jobs + started_jobs:
             job.cancel()
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
@@ -226,10 +138,16 @@ def is_queued(backup, job_id=None):
         elif job and job.is_canceled:
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
             backupjob.save()
+    return None
+
+
+def is_queued(backup, job_id=None):
+    if get_scheduled(backup, job_id) is not None:
+        return True
     return False
 
 
-def remove_orphaned(cls):
+def remove_orphaned():
     queue = get_queue('netbox_config_backup.jobs')
     registry = ScheduledJobRegistry(queue=queue)
 
@@ -240,10 +158,10 @@ def remove_orphaned(cls):
             registry.remove(job_id)
 
 
-def remove_queued(cls, backup):
+def remove_queued(backup):
     queue = get_queue('netbox_config_backup.jobs')
     registry = ScheduledJobRegistry(queue=queue)
     for job_id in registry.get_job_ids():
         job = queue.fetch_job(f'{job_id}')
-        if backup.device is not None and job.description == f'backup-{backup.device.pk}':
+        if job.description == f'{backup.uuid}':
             registry.remove(f'{job_id}')

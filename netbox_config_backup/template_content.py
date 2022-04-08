@@ -3,7 +3,7 @@ import logging
 from extras.plugins import PluginTemplateExtension
 
 from netbox_config_backup.models import Backup, BackupJob
-from netbox_config_backup.utils import get_backup_tables
+from netbox_config_backup.utils.backups import get_backup_tables
 
 logger = logging.getLogger(f"netbox_config_backup")
 

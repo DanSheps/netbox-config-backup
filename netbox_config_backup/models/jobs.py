@@ -52,10 +52,16 @@ class BackupJob(BigIDModel):
     def delete(self, using=None, keep_parents=False):
         queue = get_queue('netbox_config_backup.jobs')
 
-        queue.fetch_job(f'{self.job_id}').cancel()
-        queue.fetch_job(f'{self.job_id}').remove()
+        job = queue.fetch_job(f'{self.job_id}')
+        if job is not None:
+            job.cancel()
+            job.remove()
 
         super().delete(using=using, keep_parents=keep_parents)
+
+    @property
+    def queue(self):
+        return get_queue('netbox_config_backup.jobs')
 
     @property
     def duration(self):
@@ -81,41 +87,43 @@ class BackupJob(BigIDModel):
         Reschedule a job
         """
         if self.status == JobResultStatusChoices.STATUS_PENDING:
-            self.scheduled = time()
+            self.scheduled = time
+            job = self.queue.fetch_job(f'{self.job_id}')
+            self.queue.schedule(job, time)
         else:
             raise Exception('Job is not in a state for rescheduling')
 
     @classmethod
     def enqueue(cls, backup, delay=None):
         from netbox_config_backup.utils import enqueue
-        enqueue(backup, delay)
+        return enqueue(backup, delay)
 
     @classmethod
     def enqueue_if_needed(cls, backup, delay=None, job_id=None):
         from netbox_config_backup.utils import enqueue_if_needed
-        enqueue_if_needed(backup, delay, job_id)
+        return enqueue_if_needed(backup, delay, job_id)
 
     @classmethod
     def needs_enqueue(cls, backup, job_id=None):
         from netbox_config_backup.utils import needs_enqueue
-        needs_enqueue(backup, job_id)
+        return needs_enqueue(backup, job_id)
 
     @classmethod
     def is_running(cls, backup, job_id=None):
         from netbox_config_backup.utils import is_running
-        is_running(backup, job_id)
+        return is_running(backup, job_id)
 
     @classmethod
     def is_queued(cls, backup, job_id=None):
         from netbox_config_backup.utils import is_queued
-        is_queued(backup, job_id)
+        return is_queued(backup, job_id)
 
     @classmethod
     def remove_orphaned(cls):
         from netbox_config_backup.utils import remove_orphaned
-        remove_orphaned()
+        return remove_orphaned()
 
     @classmethod
     def remove_queued(cls, backup):
         from netbox_config_backup.utils import remove_queued
-        remove_queued()
+        return remove_queued()

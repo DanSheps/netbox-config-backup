@@ -6,7 +6,6 @@ from django.db import models
 from django.urls import reverse
 
 from django_rq import get_queue
-from rq.registry import ScheduledJobRegistry
 
 from dcim.models import Device
 from extras.choices import JobResultStatusChoices
@@ -16,6 +15,8 @@ from netbox_config_backup.helpers import get_repository_dir
 from utilities.querysets import RestrictedQuerySet
 
 from .abstract import BigIDModel
+from netbox_config_backup.utils.rq import remove_queued
+from ..utils import Differ
 
 logger = logging.getLogger(f"netbox_config_backup")
 
@@ -25,6 +26,12 @@ class Backup(BigIDModel):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)
     device = models.ForeignKey(
         to=Device,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True
+    )
+    ip = models.ForeignKey(
+        to='ipam.IPAddress',
         on_delete=models.SET_NULL,
         blank=True,
         null=True
@@ -67,17 +74,13 @@ class Backup(BigIDModel):
 
     def delete(self, *args, **kwargs):
         queue = get_queue('netbox_config_backup.jobs')
-        registry = ScheduledJobRegistry(queue=queue)
-        for job_id in registry.get_job_ids():
-            job = queue.fetch_job(job_id)
-            if self.device is not None and job.description == f'backup-{self.device.pk}':
-                registry.remove(job_id)
+        remove_queued(self)
 
         super().delete(*args, **kwargs)
 
     def enqueue_if_needed(self):
-        from netbox_config_backup.utils import enqueue_if_needed
-        enqueue_if_needed(self)
+        from netbox_config_backup.utils.rq import enqueue_if_needed
+        return enqueue_if_needed(self)
 
     def requeue(self):
         self.jobs.all().delete()
@@ -94,10 +97,16 @@ class Backup(BigIDModel):
         from netbox_config_backup.git import repository
         LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
+        current = self.get_config()
+        changes = False
         for file in files:
-            running = repository.write(f'{self.uuid}.{file}', configs.get(file))
+            if Differ().is_diff(current.get(file), configs.get(file)):
+                changes = True
+                output = repository.write(f'{self.uuid}.{file}', configs.get(file))
+        if not changes:
+            return None
 
-        commit = repository.commit(f'Backup of {self.device.name}')
+        commit = repository.commit(f'Backup of {self.device.name} for backup {self.name}')
 
         log = repository.log(index=commit, depth=1)[0]
 

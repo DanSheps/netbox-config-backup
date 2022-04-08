@@ -25,7 +25,7 @@ def get_logger():
     return logger
 
 
-def napalm_init(device, extra_args={}):
+def napalm_init(device, ip, extra_args={}):
     config = get_config()
     username = config.NAPALM_USERNAME
     password = config.NAPALM_PASSWORD
@@ -79,9 +79,13 @@ def napalm_init(device, extra_args={}):
 
 def backup_config(backup):
     commit = None
-    if backup.device is not None and backup.device.primary_ip is not None:
+    if backup.device:
+        ip = backup.ip if backup.ip is not None else backup.device.primary_ip
+    else:
+        ip = None
+    if backup.device is not None and ip is not None:
         logger.info(f'{backup} backup started')
-        d = napalm_init(backup.device)
+        d = napalm_init(backup.device, ip)
 
         configs = d.get_config()
 
