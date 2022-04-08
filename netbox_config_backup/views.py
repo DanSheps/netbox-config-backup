@@ -1,4 +1,5 @@
 import logging
+import time
 
 from django.http import HttpResponseNotFound
 from django.shortcuts import get_object_or_404, render
@@ -28,6 +29,12 @@ class BackupView(ObjectView):
 
     def get_extra_context(self, request, instance):
 
+        if BackupJob.is_queued(instance) is False:
+            logger.debug('Queuing Job')
+            job = BackupJob.enqueue_if_needed(instance)
+            time.sleep(1)
+            logger.debug(f'Job: {job}')
+
         tables = get_backup_tables(instance)
 
         jobs = BackupJob.objects.filter(backup=instance).order_by()
@@ -39,10 +46,6 @@ class BackupView(ObjectView):
             job_status = 'Pending'
         if is_running:
             job_status = 'Running'
-
-        if BackupJob.is_queued(instance) is False:
-            logger.debug('Queuing Job')
-            BackupJob.enqueue_if_needed(instance)
 
         status = {
             'status': job_status,

@@ -29,6 +29,15 @@ class Differ(difflib.Differ):
 
             yield from g
 
+    def is_diff(self, a, b):
+        diff = list(self.plain_compare(a, b))
+        for row in diff:
+            mode = row[0:1] if row[0:1] in ['+', '-'] else ''
+            if mode in ['+', '-']:
+                return True
+
+        return False
+
     def cisco_compare(self, a, b, text=True):
         diff = list(self.plain_compare(a, b))
         output = []
