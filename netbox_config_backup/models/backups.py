@@ -6,7 +6,6 @@ from django.db import models
 from django.urls import reverse
 
 from django_rq import get_queue
-from rq.registry import ScheduledJobRegistry
 
 from dcim.models import Device
 from extras.choices import JobResultStatusChoices
@@ -17,6 +16,7 @@ from utilities.querysets import RestrictedQuerySet
 
 from .abstract import BigIDModel
 from netbox_config_backup.utils.rq import remove_queued
+from ..utils import Differ
 
 logger = logging.getLogger(f"netbox_config_backup")
 
@@ -97,8 +97,14 @@ class Backup(BigIDModel):
         from netbox_config_backup.git import repository
         LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
+        current = self.get_config()
+        changes = False
         for file in files:
-            running = repository.write(f'{self.uuid}.{file}', configs.get(file))
+            if Differ().is_diff(current.get(file), configs.get(file)):
+                changes = True
+                output = repository.write(f'{self.uuid}.{file}', configs.get(file))
+        if not changes:
+            return None
 
         commit = repository.commit(f'Backup of {self.device.name} for backup {self.name}')
 

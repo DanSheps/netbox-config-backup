@@ -90,14 +90,14 @@ def is_running(backup, job_id=None):
     queue = get_queue('netbox_config_backup.jobs')
 
     jobs = backup.jobs.all()
-    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
+    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING])
 
     if job_id is not None:
         queued.exclude(job_id=job_id)
 
     for backupjob in queued.all():
         job = queue.fetch_job(f'{backupjob.job_id}')
-        if job and job.is_started and job.id in queue.started_job_registry.get_job_ids():
+        if job and job.is_started and job.id in queue.started_job_registry.get_job_ids() + queue.get_job_ids():
             return True
         elif job and job.is_started and job.id not in queue.started_job_registry.get_job_ids():
             job.cancel()
@@ -115,6 +115,7 @@ def get_scheduled(backup, job_id=None):
 
     scheduled_jobs = queue.scheduled_job_registry.get_job_ids()
     started_jobs = queue.started_job_registry.get_job_ids()
+    queued_jobs = queue.get_job_ids()
 
     jobs = backup.jobs.all()
     queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
@@ -124,11 +125,11 @@ def get_scheduled(backup, job_id=None):
 
     for backupjob in queued.all():
         job = queue.fetch_job(f'{backupjob.job_id}')
-        if job and (job.is_scheduled or job.is_queued) and job.id in scheduled_jobs + started_jobs:
+        if job and (job.is_scheduled or job.is_queued) and job.id in scheduled_jobs + started_jobs + queued_jobs:
             if job.enqueued_at is not None:
-                return queue.scheduled_job_registry.get_scheduled_time(job)
-            else:
                 return job.enqueued_at
+            else:
+                return queue.scheduled_job_registry.get_scheduled_time(job)
         elif job and (job.is_scheduled or job.is_queued) and job.id not in scheduled_jobs + started_jobs:
             job.cancel()
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
@@ -137,6 +138,7 @@ def get_scheduled(backup, job_id=None):
         elif job and job.is_canceled:
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
             backupjob.save()
+    return None
 
 
 def is_queued(backup, job_id=None):
