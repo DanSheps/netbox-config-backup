@@ -52,8 +52,10 @@ class BackupJob(BigIDModel):
     def delete(self, using=None, keep_parents=False):
         queue = get_queue('netbox_config_backup.jobs')
 
-        queue.fetch_job(f'{self.job_id}').cancel()
-        queue.fetch_job(f'{self.job_id}').remove()
+        job = queue.fetch_job(f'{self.job_id}')
+        if job is not None:
+            job.cancel()
+            job.remove()
 
         super().delete(using=using, keep_parents=keep_parents)
 
