@@ -29,7 +29,7 @@ PLUGINS = [
     # Other plugins here
 ]
 
-PLUGIN_CONFIG = {
+PLUGINS_CONFIG = {
     'netbox_config_backup': {
         # Parent folder must exist and be writable by your RQ worker and readable by the WSGI process
         'repository': '/path/to/git/repository',
