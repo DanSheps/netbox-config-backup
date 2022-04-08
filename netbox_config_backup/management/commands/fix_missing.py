@@ -8,10 +8,6 @@ class Command(BaseCommand):
         from netbox_config_backup.models import Backup, BackupCommit, BackupFile, BackupObject, BackupCommitTreeChange
         LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
-        BackupCommitTreeChange.objects.all().delete()
-        BackupCommit.objects.all().delete()
-        BackupObject.objects.all().delete()
-
         print(f'Fetching Git log')
         log = reversed(repository.log())
         print(f'Fetched Git log')
