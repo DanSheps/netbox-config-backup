@@ -87,9 +87,13 @@ class GitBackup:
         if index is None:
             index = 'HEAD'
 
-        tree = self.repository[index.encode('ascii')].tree
-        mode, sha = object_store.tree_lookup_path(self.repository.__getitem__, tree, path)
-        return self.repository[sha].data.decode('ascii')
+        try:
+            tree = self.repository[index.encode('ascii')].tree
+            mode, sha = object_store.tree_lookup_path(self.repository.__getitem__, tree, path)
+            data = self.repository[sha].data.decode('ascii')
+            return data
+        except KeyError:
+            return None
 
     def diff(self, file, a=None, b=None):
         path = file.encode('ascii')
@@ -99,9 +103,7 @@ class GitBackup:
             if commit is None:
                 data.append(None)
             else:
-                tree = self.repository[commit.encode('ascii')].tree
-                mode, sha = object_store.tree_lookup_path(self.repository.__getitem__, tree, path)
-                data.append(self.repository[sha].data.decode('ascii'))
+                data.append(self.read(file, commit))
 
         return difflib.unified_diff(data[0].splitlines(), data[1].splitlines())
 
