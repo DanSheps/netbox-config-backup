@@ -91,18 +91,20 @@ class Backup(BigIDModel):
         running = repository.read(f'{self.uuid}.running')
         startup = repository.read(f'{self.uuid}.startup')
 
-        return {'running': running, 'startup': startup}
+        return {'running': running if running is not None else '', 'startup': startup if startup is not None else ''}
 
     def set_config(self, configs, files=('running', 'startup')):
         from netbox_config_backup.git import repository
         LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
-        current = self.get_config()
+        stored_configs = self.get_config()
         changes = False
         for file in files:
-            if Differ().is_diff(current.get(file), configs.get(file)):
+            stored = stored_configs.get(file) if stored_configs.get(file) is not None else ''
+            current = configs.get(file) if configs.get(file) is not None else ''
+            if Differ().is_diff(stored, current):
                 changes = True
-                output = repository.write(f'{self.uuid}.{file}', configs.get(file))
+                output = repository.write(f'{self.uuid}.{file}', current)
         if not changes:
             return None
 
