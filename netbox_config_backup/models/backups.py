@@ -22,7 +22,7 @@ logger = logging.getLogger(f"netbox_config_backup")
 
 
 class Backup(BigIDModel):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, unique=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)
     device = models.ForeignKey(
         to=Device,
@@ -118,7 +118,7 @@ class Backup(BigIDModel):
             raise Exception('Commit already exists for this backup and sha value')
         else:
             bc = BackupCommit(sha=commit, time=time)
-            logger.info(f'{commit}:{bc.time}')
+            logger.info(f'{self}: {commit}:{bc.time}')
             bc.save()
 
         for change in log.get('changes', []):

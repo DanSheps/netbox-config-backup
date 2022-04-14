@@ -1,7 +1,5 @@
 import logging
-import time
 
-from django.http import HttpResponseNotFound
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -29,12 +27,6 @@ class BackupView(ObjectView):
 
     def get_extra_context(self, request, instance):
 
-        if BackupJob.is_queued(instance) is False:
-            logger.debug('Queuing Job')
-            job = BackupJob.enqueue_if_needed(instance)
-            time.sleep(1)
-            logger.debug(f'Job: {job}')
-
         tables = get_backup_tables(instance)
 
         jobs = BackupJob.objects.filter(backup=instance).order_by()
@@ -46,6 +38,10 @@ class BackupView(ObjectView):
             job_status = 'Pending'
         if is_running:
             job_status = 'Running'
+
+        if BackupJob.is_queued(instance) is False:
+            logger.debug(f'{instance}: Queuing Job')
+            BackupJob.enqueue_if_needed(instance)
 
         status = {
             'status': job_status,
@@ -113,13 +109,16 @@ class DiffView(View):
         repo = GitBackup()
         prevcommit = previous.commit if previous.commit is not None else 'HEAD'
 
+        previous_sha = prevcommit.commit.sha
+        current_sha = current.commit.sha
+
         if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
             differ = Differ()
-            new = repo.read(path, current.commit.sha)
-            old = repo.read(path, previous.commit.sha)
+            new = repo.read(path, current_sha)
+            old = repo.read(path, previous_sha)
             diff = differ.cisco_compare(old.splitlines(), new.splitlines())
         else:
-            diff = list(repo.diff(path, prevcommit, current.commit.sha))
+            diff = list(repo.diff(path, previous_sha, current_sha))
         for idx, line in enumerate(diff):
             diff[idx] = line.rstrip()
 
