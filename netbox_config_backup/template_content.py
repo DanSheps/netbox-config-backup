@@ -19,7 +19,7 @@ class DeviceBackups(PluginTemplateExtension):
             tables = get_backup_tables(instance)
 
             if BackupJob.is_queued(instance) is False:
-                logger.debug('Queuing Job')
+                logger.debug(f'{instance}: Queuing Job')
                 BackupJob.enqueue(instance)
 
             return self.render('netbox_config_backup/inc/backup_tables.html', extra_context={

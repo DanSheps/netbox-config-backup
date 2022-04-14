@@ -118,7 +118,7 @@ class Backup(BigIDModel):
             raise Exception('Commit already exists for this backup and sha value')
         else:
             bc = BackupCommit(sha=commit, time=time)
-            logger.info(f'{commit}:{bc.time}')
+            logger.info(f'{self}: {commit}:{bc.time}')
             bc.save()
 
         for change in log.get('changes', []):
