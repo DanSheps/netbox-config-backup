@@ -40,7 +40,7 @@ class BackupView(ObjectView):
             job_status = 'Running'
 
         if BackupJob.is_queued(instance) is False:
-            logger.debug('Queuing Job')
+            logger.debug(f'{instance}: Queuing Job')
             BackupJob.enqueue_if_needed(instance)
 
         status = {

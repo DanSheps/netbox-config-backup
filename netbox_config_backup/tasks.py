@@ -84,7 +84,7 @@ def backup_config(backup):
     else:
         ip = None
     if backup.device is not None and ip is not None:
-        logger.info(f'{backup} backup started')
+        logger.info(f'{backup}: Backup started')
         d = napalm_init(backup.device, ip)
 
         configs = d.get_config()
@@ -92,9 +92,9 @@ def backup_config(backup):
         commit = backup.set_config(configs)
 
         d.close()
-        logger.info(f'{backup} backup complete')
+        logger.info(f'{backup}: Backup complete')
     else:
-        logger.info(f'{backup} no IP set')
+        logger.info(f'{backup}: No IP set')
 
     return commit
 
@@ -115,15 +115,16 @@ def backup_job(pk):
 
         job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
         job_result.data = {'commit': f'{commit}' if commit is not None else ''}
-
+        job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
         # Enqueue next job if one doesn't exist
         try:
             BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
         except Exception as e:
+            logger.error(f'{backup}: {e}')
             logger.error(traceback.format_exc())
             logger.error(e)
-            job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
     except Exception as e:
+        logger.error(f'{backup}: {e}')
         logger.error(traceback.format_exc())
         logger.error(e)
 
