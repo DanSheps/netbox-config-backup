@@ -107,10 +107,9 @@ class DiffView(View):
         path = f'{current.file.path}'
 
         repo = GitBackup()
-        prevcommit = previous.commit if previous.commit is not None else 'HEAD'
 
-        previous_sha = prevcommit.commit.sha
-        current_sha = current.commit.sha
+        previous_sha = previous.commit.sha if previous.commit is not None else 'HEAD'
+        current_sha = current.commit.sha if current.commit is not None else None
 
         if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
             differ = Differ()
