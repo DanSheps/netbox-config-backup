@@ -109,13 +109,16 @@ class DiffView(View):
         repo = GitBackup()
         prevcommit = previous.commit if previous.commit is not None else 'HEAD'
 
+        previous_sha = prevcommit.commit.sha
+        current_sha = current.commit.sha
+
         if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
             differ = Differ()
-            new = repo.read(path, current.commit.sha)
-            old = repo.read(path, previous.commit.sha)
+            new = repo.read(path, current_sha)
+            old = repo.read(path, previous_sha)
             diff = differ.cisco_compare(old.splitlines(), new.splitlines())
         else:
-            diff = list(repo.diff(path, prevcommit, current.commit.sha))
+            diff = list(repo.diff(path, previous_sha, current_sha))
         for idx, line in enumerate(diff):
             diff[idx] = line.rstrip()
 
