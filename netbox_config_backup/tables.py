@@ -8,7 +8,7 @@ from netbox.tables import columns, BaseTable
 class ActionButtonsColumn(tables.TemplateColumn):
     attrs = {'td': {'class': 'text-end text-nowrap noprint min-width'}}
     template_code = """
-    <a href="{% url 'plugins:netbox_config_backup:backup_config' pk=record.pk current=record.current.pk %}" class="btn btn-sm btn-outline-dark" title="Edit">
+    <a href="{% url 'plugins:netbox_config_backup:backup_config' pk=record.pk current=record.current.pk %}" class="btn btn-sm btn-outline-dark" title="View">
         <i class="mdi mdi-cloud-download"></i>
     </a>
     {% if record.previous %}
