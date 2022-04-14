@@ -51,3 +51,15 @@ ExecStart=/opt/netbox/venv/bin/python3 /opt/netbox/netbox/manage.py rqworker --n
 7. Enable the service with x number of workers: `systemctl enable ncb-rq@{1..10}` (This will generate 10 worker symlinks to auto start)
 8. Start the service with x number of workers: `systemctl start ncb-rq@{1..10}` (This will start 10 workers)
 9. Create your first device backup
+
+## Logging
+
+To enable logging, add the following to your configuration.py under LOGGING:
+
+```python
+        'netbox_config_backup': {
+            'handlers': ['enter_your_handlers_here'],
+            'level': 'desired_log_level',
+            'propagate': True,
+        },
+```
