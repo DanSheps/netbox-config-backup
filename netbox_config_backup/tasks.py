@@ -113,7 +113,8 @@ def backup_job(pk):
         job_result = BackupJob.objects.get(pk=pk)
         #logger.debug(f'[{pk}] Found existing job')
     except BackupJob.DoesNotExist:
-        raise Exception('Cannot locate job in DB')
+        logger.error(f'Cannot locate job (Id: {pk}) in DB')
+        raise Exception('Cannot locate job (Id: {pk}) in DB')
     backup = job_result.backup
     delay = timedelta(seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency'))
 
