@@ -21,9 +21,17 @@
                     <tr>
                         <th scope="row">Device</th>
                         {% if object.device %}
-                            <td><a href="{% url 'dcim:device' pk=object.device.pk %}">{{ object.device|placeholder }}</a> ({{ object.device.primary_ip|placeholder }})</td>
+                            <td><a href="{% url 'dcim:device' pk=object.device.pk %}">{{ object.device|placeholder }}</a></td>
                         {% else %}
-                            <td>{{ object.device|placeholder }} ({{ object.device.primary_ip|placeholder }})</td>
+                            <td>{{ object.device|placeholder }}</td>
+                        {% endif %}
+                    </tr>
+                    <tr>
+                        <th scope="row">IP Address</th>
+                        {% if object.ip %}
+                            <td><a href="{% url 'ipam:ipaddress' pk=object.ip.pk %}">{{ object.ip|placeholder }}</a></td>
+                        {% else %}
+                            <td>{{ object.ip|placeholder }}</td>
                         {% endif %}
                     </tr>
                 </table>

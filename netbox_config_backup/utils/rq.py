@@ -32,7 +32,7 @@ def enqueue(backup, delay=None):
             'netbox_config_backup.tasks.backup_job',
             description=f'{backup.uuid}',
             job_id=str(result.job_id),
-            pk=result.pk
+            pk=result.pk,
         )
         logger.info(f'{backup}: {result.job_id}')
     else:
@@ -64,7 +64,7 @@ def needs_enqueue(backup, job_id=None):
     started_jobs = started.get_job_ids()
 
     if backup.device is None:
-        print('Device')
+        print(f'No device for {backup}')
         return False
 
     if backup.device.status in [DeviceStatusChoices.STATUS_OFFLINE,
@@ -100,10 +100,20 @@ def is_running(backup, job_id=None):
         if job and job.is_started and job.id in queue.started_job_registry.get_job_ids() + queue.get_job_ids():
             return True
         elif job and job.is_started and job.id not in queue.started_job_registry.get_job_ids():
+            status = {
+                     'is_canceled': job.is_canceled,
+                     'is_deferred': job.is_deferred,
+                     'is_failed': job.is_failed,
+                     'is_finished': job.is_finished,
+                     'is_queued': job.is_queued,
+                     'is_scheduled': job.is_scheduled,
+                     'is_started': job.is_started,
+                     'is_stopped': job.is_stopped,
+            }
             job.cancel()
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
             backupjob.save()
-            logger.warning(f'{backup}: Job in queue but not in a registry, cancelling')
+            logger.warning(f'{backup}: Job in started queue but not in a registry, cancelling {status}')
         elif job and job.is_canceled:
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
             backupjob.save()
@@ -131,10 +141,20 @@ def get_scheduled(backup, job_id=None):
             else:
                 return queue.scheduled_job_registry.get_scheduled_time(job)
         elif job and (job.is_scheduled or job.is_queued) and job.id not in scheduled_jobs + started_jobs:
+            status = {
+                     'is_canceled': job.is_canceled,
+                     'is_deferred': job.is_deferred,
+                     'is_failed': job.is_failed,
+                     'is_finished': job.is_finished,
+                     'is_queued': job.is_queued,
+                     'is_scheduled': job.is_scheduled,
+                     'is_started': job.is_started,
+                     'is_stopped': job.is_stopped,
+            }
             job.cancel()
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
             backupjob.save()
-            logger.warning(f'{backup}: Job in queue but not in a registry, cancelling')
+            logger.warning(f'{backup}: Job in scheduled or started queue but not in a registry, cancelling {status} {scheduled_jobs + started_jobs + queued_jobs}')
         elif job and job.is_canceled:
             backupjob.status = JobResultStatusChoices.STATUS_FAILED
             backupjob.save()

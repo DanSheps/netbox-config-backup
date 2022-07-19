@@ -42,7 +42,10 @@ class GitBackup:
             self.repository = repo.Repo.init(self.location, True)
 
         if self.repository is not None:
-            self.driller = Git(self.location)
+            try:
+                self.driller = Git(self.location)
+            except OSError:
+                pass
 
     def write(self, file, data):
         path = f'{self.location}{os.path.sep}{file}'
@@ -105,7 +108,8 @@ class GitBackup:
             else:
                 data.append(self.read(file, commit))
 
-        return difflib.unified_diff(data[0].splitlines(), data[1].splitlines())
+        diff = DeepDiff(data[0], data[1]).diff()
+        return diff
 
     def log(self, file=None, paths=[], index=None, depth=None):
         def get_index(haystack, needle):

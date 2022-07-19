@@ -112,15 +112,18 @@ class DiffView(View):
         current_sha = current.commit.sha if current.commit is not None else None
 
         if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
-            differ = Differ()
             new = repo.read(path, current_sha)
             old = repo.read(path, previous_sha)
-            diff = differ.cisco_compare(old.splitlines(), new.splitlines())
+            differ = Differ(old, new)
+            diff = differ.cisco_compare()
         else:
-            diff = list(repo.diff(path, previous_sha, current_sha))
+            new = repo.read(path, current_sha)
+            old = repo.read(path, previous_sha)
+            differ = Differ(old, new)
+            diff = differ.compare()
+
         for idx, line in enumerate(diff):
             diff[idx] = line.rstrip()
-
 
         return render(request, 'netbox_config_backup/diff.html', {
             'object': backup,

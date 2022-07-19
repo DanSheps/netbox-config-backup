@@ -4,6 +4,7 @@ from django.utils.translation import gettext as _
 
 from dcim.choices import DeviceStatusChoices
 from dcim.models import Device
+from ipam.models import IPAddress
 from netbox_config_backup.models import Backup
 from utilities.forms import BootstrapMixin, DynamicModelChoiceField
 
@@ -24,13 +25,22 @@ class BackupForm(BootstrapMixin, forms.ModelForm):
             'has_primary_ip': True,
         },
     )
+    ip = DynamicModelChoiceField(
+        label='IP Address',
+        required=False,
+        queryset=IPAddress.objects.all(),
+        query_params={
+            'device_id': '$device'
+        }
+    )
     class Meta:
         model = Backup
-        fields = ('name', 'device')
+        fields = ('name', 'device', 'ip')
 
     def clean(self):
-        #print(self.device)
         super().clean()
+        if self.cleaned_data.get('device', None) == None:
+            self.cleaned_data['ip'] = None
 
 
 class BackupFiltersetForm(BootstrapMixin, forms.Form):

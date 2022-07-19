@@ -25,7 +25,7 @@ def get_logger():
     return logger
 
 
-def napalm_init(device, ip, extra_args={}):
+def napalm_init(device, ip=None, extra_args={}):
     config = get_config()
     username = config.NAPALM_USERNAME
     password = config.NAPALM_PASSWORD
@@ -37,7 +37,9 @@ def napalm_init(device, ip, extra_args={}):
         optional_args.update(extra_args)
 
     # Check for primary IP address from NetBox object
-    if device.primary_ip:
+    if ip is not None:
+        host = str(ip.address.ip)
+    elif device.primary_ip and device.primary_ip is not None:
         host = str(device.primary_ip.address.ip)
     else:
         raise ServiceUnavailable(
@@ -77,7 +79,7 @@ def napalm_init(device, ip, extra_args={}):
     return d
 
 
-def backup_config(backup):
+def backup_config(backup, pk=None):
     commit = None
     if backup.device:
         ip = backup.ip if backup.ip is not None else backup.device.primary_ip
@@ -85,11 +87,17 @@ def backup_config(backup):
         ip = None
     if backup.device is not None and ip is not None:
         logger.info(f'{backup}: Backup started')
+        #logger.debug(f'[{pk}] Connecting')
         d = napalm_init(backup.device, ip)
+        #logger.debug(f'[{pk}] Finished Connection')
 
+        #logger.debug(f'[{pk}] Getting config')
         configs = d.get_config()
+        #logger.debug(f'[{pk}] Finished config get')
 
-        commit = backup.set_config(configs)
+        #logger.debug(f'[{pk}] Setting config')
+        commit = backup.set_config(configs, pk=pk)
+        #logger.debug(f'[{pk}] Finished config set')
 
         d.close()
         logger.info(f'{backup}: Backup complete')
@@ -100,10 +108,13 @@ def backup_config(backup):
 
 
 def backup_job(pk):
+    #logger.debug(f'[{pk}] Starting backup run')
     try:
         job_result = BackupJob.objects.get(pk=pk)
+        #logger.debug(f'[{pk}] Found existing job')
     except BackupJob.DoesNotExist:
-        raise Exception('Cannot locate job in DB')
+        logger.error(f'Cannot locate job (Id: {pk}) in DB')
+        raise Exception('Cannot locate job (Id: {pk}) in DB')
     backup = job_result.backup
     delay = timedelta(seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency'))
 
@@ -111,18 +122,24 @@ def backup_job(pk):
     job_result.status = JobResultStatusChoices.STATUS_RUNNING
     job_result.save()
     try:
-        commit = backup_config(backup)
+        #logger.debug(f'[{pk}] Starting backup')
+        commit = backup_config(backup, pk=pk)
+        #logger.debug(f'[{pk}] Finished backup')
 
         job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
         job_result.data = {'commit': f'{commit}' if commit is not None else ''}
         job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
         # Enqueue next job if one doesn't exist
         try:
+            #logger.debug(f'[{pk}] Starting Enqueue')
             BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
+            #logger.debug(f'[{pk}] Finished Enqueue')
         except Exception as e:
             logger.error(f'{backup}: {e}')
             logger.error(traceback.format_exc())
             logger.error(e)
+    except ServiceUnavailable as e:
+        logger.error(f'{backup}: {e}')
     except Exception as e:
         logger.error(f'{backup}: {e}')
         logger.error(traceback.format_exc())
@@ -131,6 +148,7 @@ def backup_job(pk):
         job_result.set_status(JobResultStatusChoices.STATUS_FAILED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 
+    #logger.debug(f'[{pk}] Saving result')
     job_result.save()
 
     # Clear queue of old jobs
