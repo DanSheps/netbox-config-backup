@@ -93,35 +93,45 @@ class Backup(BigIDModel):
 
         return {'running': running if running is not None else '', 'startup': startup if startup is not None else ''}
 
-    def set_config(self, configs, files=('running', 'startup')):
+    def set_config(self, configs, files=('running', 'startup'), pk=None):
         from netbox_config_backup.git import repository
         LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
         stored_configs = self.get_config()
         changes = False
         for file in files:
+            #logger.debug(f'[{pk}] Getting existing config for {file}')
             stored = stored_configs.get(file) if stored_configs.get(file) is not None else ''
+            #logger.debug(f'[{pk}] Getting new config')
             current = configs.get(file) if configs.get(file) is not None else ''
-            if Differ().is_diff(stored, current):
+            #logger.debug(f'[{pk}] Starting diff for {file}')
+            if Differ(stored, current).is_diff():
                 changes = True
                 output = repository.write(f'{self.uuid}.{file}', current)
+            #logger.debug(f'[{pk}] Finished diff for {file}')
         if not changes:
             return None
 
+        #logger.debug(f'[{pk}] Commiting files')
         commit = repository.commit(f'Backup of {self.device.name} for backup {self.name}')
 
+        #logger.debug(f'[{pk}] Getting repository log')
         log = repository.log(index=commit, depth=1)[0]
 
+        #logger.debug(f'[{pk}] Saving commit to DB')
         bc = BackupCommit.objects.filter(sha=commit)
         time = log.get('time', datetime.datetime.now()).replace(tzinfo=LOCAL_TIMEZONE)
         if bc.count() > 0:
+            #logger.debug(f'[{pk}] Error committing')
             raise Exception('Commit already exists for this backup and sha value')
         else:
+            #logger.debug(f'[{pk}] Saving commit')
             bc = BackupCommit(sha=commit, time=time)
             logger.info(f'{self}: {commit}:{bc.time}')
             bc.save()
 
         for change in log.get('changes', []):
+            #logger.debug(f'[{pk}] Adding backup tree changes')
             backupfile = None
             change_data = {}
             for key in ['old', 'new']:
@@ -159,7 +169,8 @@ class Backup(BigIDModel):
                     new=change_data.get('new', None)
                 )
                 bctc.save()
-
+                #logger.debug(f'[{pk}] Tree saved')
+        #logger.debug(f'[{pk}] Get config saved')
         return commit
 
     @classmethod

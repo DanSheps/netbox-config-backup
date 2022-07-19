@@ -32,7 +32,8 @@ def enqueue(backup, delay=None):
             'netbox_config_backup.tasks.backup_job',
             description=f'{backup.uuid}',
             job_id=str(result.job_id),
-            pk=result.pk
+            pk=result.pk,
+            timeout=600,
         )
         logger.info(f'{backup}: {result.job_id}')
     else:
