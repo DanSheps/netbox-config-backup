@@ -42,7 +42,10 @@ class GitBackup:
             self.repository = repo.Repo.init(self.location, True)
 
         if self.repository is not None:
-            self.driller = Git(self.location)
+            try:
+                self.driller = Git(self.location)
+            except OSError:
+                pass
 
     def write(self, file, data):
         path = f'{self.location}{os.path.sep}{file}'

@@ -25,7 +25,7 @@ def get_logger():
     return logger
 
 
-def napalm_init(device, ip, extra_args={}):
+def napalm_init(device, ip=None, extra_args={}):
     config = get_config()
     username = config.NAPALM_USERNAME
     password = config.NAPALM_PASSWORD
@@ -37,7 +37,9 @@ def napalm_init(device, ip, extra_args={}):
         optional_args.update(extra_args)
 
     # Check for primary IP address from NetBox object
-    if device.primary_ip:
+    if ip is not None:
+        host = str(ip.address.ip)
+    elif device.primary_ip and device.primary_ip is not None:
         host = str(device.primary_ip.address.ip)
     else:
         raise ServiceUnavailable(
