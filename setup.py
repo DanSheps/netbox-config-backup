@@ -12,6 +12,7 @@ setup(
     maintainer='Daniel Sheppard',
     maintainer_email='dans@dansheps.com',
     install_requires=[
+        'napalm',
         'importlib',
         'uuid',
         'dulwich',

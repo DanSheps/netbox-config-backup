@@ -12,7 +12,6 @@ from netbox.api.exceptions import ServiceUnavailable
 from netbox.config import get_config
 from netbox_config_backup.models import Backup, BackupJob, BackupCommit
 
-
 def get_logger():
     # Setup logging to Stdout
     formatter = logging.Formatter(f'[%(asctime)s][%(levelname)s] - %(message)s')
@@ -108,6 +107,7 @@ def backup_config(backup, pk=None):
 
 
 def backup_job(pk):
+    import netmiko
     #logger.debug(f'[{pk}] Starting backup run')
     try:
         job_result = BackupJob.objects.get(pk=pk)
@@ -135,16 +135,16 @@ def backup_job(pk):
             BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
             #logger.debug(f'[{pk}] Finished Enqueue')
         except Exception as e:
-            logger.error(f'{backup}: {e}')
-            logger.error(traceback.format_exc())
-            logger.error(e)
+            logger.error(f'Job Enqueue after completion failed for job: {backup}')
+            logger.error(f'\tException: {e}')
+    except netmiko.exceptions.ReadTimeout as e:
+        BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
+        logger.error(f'Netmiko read timeout on job: {backup}')
     except ServiceUnavailable as e:
-        logger.error(f'{backup}: {e}')
+        logger.error(f'Napalm service read failure on job: {backup}')
+        BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
     except Exception as e:
-        logger.error(f'{backup}: {e}')
-        logger.error(traceback.format_exc())
-        logger.error(e)
-
+        logger.error(f'Exception at line 148 on job: {backup}')
         job_result.set_status(JobResultStatusChoices.STATUS_FAILED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 
