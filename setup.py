@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='netbox_config_backup',
-    version='1.2.7',
+    version='1.2.8',
     description='NetBox Configuration Backup',
     long_description='Plugin to backup device configuration',
     url='https://github.com/dansheps/netbox-config-backup/',
@@ -12,6 +12,7 @@ setup(
     maintainer='Daniel Sheppard',
     maintainer_email='dans@dansheps.com',
     install_requires=[
+        'napalm',
         'importlib',
         'uuid',
         'dulwich',

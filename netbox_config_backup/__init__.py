@@ -1,10 +1,5 @@
 from extras.plugins import PluginConfig
-
-
-try:
-    from importlib.metadata import metadata
-except ModuleNotFoundError:
-    from importlib_metadata import metadata
+from importlib.metadata import metadata
 
 metadata = metadata('netbox_config_backup')
 
@@ -18,7 +13,7 @@ class NetboxConfigBackup(PluginConfig):
     author_email = metadata.get('Author-email')
     base_url = 'configbackup'
     min_version = '3.2.0'
-    max_version = '3.3.99'
+    max_version = '3.4.99'
     required_settings = [
         'repository',
         'committer',
