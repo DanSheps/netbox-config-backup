@@ -25,3 +25,12 @@ class CommitTreeChangeTypeChoices(ChoiceSet):
         (TYPE_MODIFY, 'Modify'),
     )
 
+
+class StatusChoices(ChoiceSet):
+    STATUS_ACTIVE = 'active'
+    STATUS_DISABLED = 'disabled'
+
+    CHOICES = (
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_DISABLED, 'Disabled'),
+    )

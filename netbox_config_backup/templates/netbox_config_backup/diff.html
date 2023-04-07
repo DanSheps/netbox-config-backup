@@ -1,4 +1,13 @@
 {% extends 'netbox_config_backup/base.html' %}
+{% load helpers %}
+
+{% block subtitle %}
+  <div class="object-subtitle">
+    <span>{{ current.commit.time }}</span>
+    <span class="separator">&middot;&middot;&middot;</span>
+    <span>{{ previous.commit.time }}</span>
+  </div>
+{% endblock %}
 
 {% block content %}
 <div class="row">

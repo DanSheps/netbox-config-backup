@@ -8,9 +8,9 @@ from ipam.models import IPAddress
 from netbox_config_backup.models import Backup
 from utilities.forms import BootstrapMixin, DynamicModelChoiceField
 
-__all = (
-    'VirtualCircuitForm',
-    'VirtualCircuitInterfaceForm',
+__all__ = (
+    'BackupForm',
+    'BackupFilterSetForm',
 )
 
 
@@ -35,7 +35,7 @@ class BackupForm(BootstrapMixin, forms.ModelForm):
     )
     class Meta:
         model = Backup
-        fields = ('name', 'device', 'ip')
+        fields = ('name', 'device', 'status', 'ip')
 
     def clean(self):
         super().clean()
@@ -43,7 +43,7 @@ class BackupForm(BootstrapMixin, forms.ModelForm):
             self.cleaned_data['ip'] = None
 
 
-class BackupFiltersetForm(BootstrapMixin, forms.Form):
+class BackupFilterSetForm(BootstrapMixin, forms.Form):
     model = Backup
     field_order = [
         'q', 'name', 'device'

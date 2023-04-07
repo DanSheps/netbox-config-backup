@@ -1,0 +1,36 @@
+{% extends 'netbox_config_backup/base.html' %}
+{% load helpers %}
+
+{% block subtitle %}
+  <div class="object-subtitle"></div>
+{% endblock %}
+
+{%  block extra_controls %}
+  <div class="btn-group" role="group">
+    <a href="{{ request.path }}{% querystring request type='startup' %}" class="btn btn-sm {% if startup and not running %}btn-secondary active{% else %}btn-outline-secondary{% endif %}">
+      Show Startup
+    </a>
+    <a href="{{ request.path }}{% querystring request type='running' %}" class="btn btn-sm {% if running and not startup %}btn-secondary active{% else %}btn-outline-secondary{% endif %}">
+      Show Running
+    </a>
+    <a href="{{ request.path }}{% querystring request type='' %}" class="btn btn-sm {% if not running and not startup %}btn-secondary active{% else %}btn-outline-secondary{% endif %}">
+      Show All
+    </a>
+  </div>
+{% endblock %}
+
+{% block content %}
+  {% include 'inc/table_controls_htmx.html' with table_modal="BackupsTable_config" %}
+
+    <div class="card">
+      <div class="card-body" id="object_list">
+        {% include 'htmx/table.html' %}
+      </div>
+    </div>
+  </form>
+{% endblock %}
+
+{% block modals %}
+  {{ block.super }}
+  {% table_config_form table %}
+{% endblock modals %}

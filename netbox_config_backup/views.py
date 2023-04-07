@@ -1,33 +1,37 @@
 import logging
 
+from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from extras.choices import JobResultStatusChoices
-from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView
+from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView
+from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet
 
-from netbox_config_backup.forms import BackupForm
+from netbox_config_backup.forms import BackupForm, BackupFilterSetForm
 from netbox_config_backup.git import GitBackup
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit, BackupObject
-from netbox_config_backup.tables import BackupTable
+from netbox_config_backup.tables import BackupTable, BackupsTable
 from netbox_config_backup.utils import get_backup_tables, Differ
+from utilities.views import register_model_view, ViewTab
 
 logger = logging.getLogger(f"netbox_config_backup")
 
 
 class BackupListView(ObjectListView):
     queryset = Backup.objects.all()
+    filterset = BackupFilterSet
+    filterset_form = BackupFilterSetForm
     table = BackupTable
     action_buttons = ('add',)
 
 
+@register_model_view(Backup)
 class BackupView(ObjectView):
     queryset = Backup.objects.all()
-    template_name = 'netbox_config_backup/device.html'
+    template_name = 'netbox_config_backup/backup.html'
 
     def get_extra_context(self, request, instance):
-
-        tables = get_backup_tables(instance)
 
         jobs = BackupJob.objects.filter(backup=instance).order_by()
         is_running = True if jobs.filter(status=JobResultStatusChoices.STATUS_RUNNING).count() > 0 else False
@@ -53,27 +57,67 @@ class BackupView(ObjectView):
         }
 
         return {
-            'running': tables.get('running', {}),
-            'startup': tables.get('startup', {}),
             'status': status,
         }
 
 
+@register_model_view(Backup, name='backups')
+class BackupBackupsView(ObjectChildrenView):
+    queryset = Backup.objects.all()
+    template_name = 'netbox_config_backup/backups.html'
+    child_model = BackupCommitTreeChange
+    table = BackupsTable
+    filterset = BackupsFilterSet
+    actions = ['config', 'diff']
+    action_perms = {
+        'config': {'view'},
+        'diff': {'view'},
+    }
+    tab = ViewTab(
+        label='View Backups',
+    )
+
+    def get_children(self, request, parent):
+        return self.child_model.objects.filter(backup=parent, file__isnull=False)
+
+    def get_extra_context(self, request, instance):
+        return {
+            'running': bool(request.GET.get('type') == 'running'),
+            'startup': bool(request.GET.get('type') == 'startup'),
+        }
+
+
+
+
+@register_model_view(Backup, 'edit')
 class BackupEditView(ObjectEditView):
     queryset = Backup.objects.all()
     form = BackupForm
 
 
+@register_model_view(Backup, 'delete')
 class BackupDeleteView(ObjectDeleteView):
     queryset = Backup.objects.all()
 
 
-class ConfigView(View):
+@register_model_view(Backup, 'config')
+class ConfigView(ObjectView):
+    queryset = Backup.objects.all()
     template_name = 'netbox_config_backup/config.html'
+    tab = ViewTab(
+        label='Configuration',
+    )
 
-    def get(self, request, pk, current):
+    def get(self, request, pk, current=None):
         backup = get_object_or_404(Backup.objects.all(), pk=pk)
-        current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+        if current:
+            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+        else:
+            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
+            if not current:
+                raise Http404(
+                    "No current commit available"
+                )
 
         path = f'{current.file.path}'
 
@@ -83,7 +127,8 @@ class ConfigView(View):
         previous = None
         if current is not None and current.old is not None:
             try:
-                previous = backup.changes.filter(file__type=current.file.type, commit__time__lt=current.commit.time).last()
+                previous = backup.changes.filter(file__type=current.file.type, commit__time__lt=current.commit.time).\
+                    last()
             except:
                 pass
 
@@ -96,13 +141,36 @@ class ConfigView(View):
         })
 
 
-class DiffView(View):
+@register_model_view(Backup, 'diff')
+class DiffView(ObjectView):
+    queryset = Backup.objects.all()
     template_name = 'netbox_config_backup/diff.html'
+    tab = ViewTab(
+        label='Diff',
+    )
 
     def get(self, request, pk, current, previous=None):
         backup = get_object_or_404(Backup.objects.all(), pk=pk)
-        current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
-        previous = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=previous)
+        if current:
+            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+        else:
+            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
+            if not current:
+                raise Http404(
+                    "No current commit available"
+                )
+        if previous:
+            previous = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=previous)
+        else:
+            previous = BackupCommitTreeChange.objects.filter(
+                backup=backup,
+                file__type=current.file.type,
+                commit__time__lt=current.commit.time
+            ).last()
+            if not previous:
+                raise Http404(
+                    "No Previous Commit"
+                )
 
         path = f'{current.file.path}'
 

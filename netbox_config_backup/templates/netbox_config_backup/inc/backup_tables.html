@@ -3,32 +3,11 @@
     <div class="col col-md-12">
         <div class="card">
             <h5 class="card-header">
-                Backups
+                <a href="{% url 'plugins:netbox_config_backup:backup_backups' pk=object.pk %}">Backups</a>
             </h5>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col col-md-6">
-                        <div class="card">
-                            <h6 class="card-header">
-                                Running Configurations
-                            </h6>
-                            <div class="card-body">
-                                {% render_table running 'inc/table.html' %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col col-md-6">
-                        <div class="card">
-                            <h6 class="card-header">
-                                Startup Configurations
-                            </h6>
-                            <div class="card-body">
-                                {% render_table startup 'inc/table.html' %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+          <div class="card-body" id="object_list">
+            {% include 'htmx/table.html' %}
+          </div>
         </div>
     </div>
 </div>
