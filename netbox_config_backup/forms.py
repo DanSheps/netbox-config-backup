@@ -6,7 +6,7 @@ from dcim.choices import DeviceStatusChoices
 from dcim.models import Device
 from ipam.models import IPAddress
 from netbox_config_backup.models import Backup
-from utilities.forms import BootstrapMixin, DynamicModelChoiceField
+from utilities.forms import BootstrapMixin, DynamicModelChoiceField, DynamicModelMultipleChoiceField
 
 __all__ = (
     'BackupForm',
@@ -46,12 +46,32 @@ class BackupForm(BootstrapMixin, forms.ModelForm):
 class BackupFilterSetForm(BootstrapMixin, forms.Form):
     model = Backup
     field_order = [
-        'q', 'name', 'device'
+        'q', 'name', 'device_id', 'ip'
     ]
     q = forms.CharField(
         required=False,
         widget=forms.TextInput(attrs={'placeholder': _('All Fields')}),
         label=_('Search')
+    )
+    device_id = DynamicModelMultipleChoiceField(
+        queryset=Device.objects.all(),
+        required=False,
+        label=_('Device'),
+        fetch_trigger='open',
+        query_params={
+            'status': [DeviceStatusChoices.STATUS_ACTIVE],
+            'platform__napalm__ne': None,
+            'has_primary_ip': True,
+        }
+    )
+    ip = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                'placeholder': 'IP Address',
+            }
+        ),
+        label=_('IP Address')
     )
 
 
