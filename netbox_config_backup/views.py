@@ -2,6 +2,7 @@ import logging
 
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse, NoReverseMatch
 from django.views import View
 
 from extras.choices import JobResultStatusChoices
@@ -98,6 +99,33 @@ class BackupEditView(ObjectEditView):
 @register_model_view(Backup, 'delete')
 class BackupDeleteView(ObjectDeleteView):
     queryset = Backup.objects.all()
+
+    def get_return_url(self, request, obj=None):
+
+        # First, see if `return_url` was specified as a query parameter or form data. Use this URL only if it's
+        # considered safe.
+        return_url = request.GET.get('return_url') or request.POST.get('return_url')
+        if return_url and return_url.startswith('/'):
+            return return_url
+
+        # Next, check if the object being modified (if any) has an absolute URL.
+        if obj is not None and obj.pk and hasattr(obj, 'get_absolute_url'):
+            return obj.get_absolute_url()
+
+        # Fall back to the default URL (if specified) for the view.
+        if self.default_return_url is not None:
+            return reverse(self.default_return_url)
+
+        # Attempt to dynamically resolve the list view for the object
+        if hasattr(self, 'queryset'):
+            model_opts = self.queryset.model._meta
+            try:
+                return reverse(f'plugins:{model_opts.app_label}:{model_opts.model_name}_list')
+            except NoReverseMatch:
+                pass
+
+        # If all else fails, return home. Ideally this should never happen.
+        return reverse('home')
 
 
 @register_model_view(Backup, 'config')
