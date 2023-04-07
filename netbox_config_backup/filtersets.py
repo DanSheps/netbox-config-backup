@@ -1,15 +1,17 @@
 import django_filters
 from django.db.models import Q
+from django.utils.translation import gettext as _
 
-from netbox.filtersets import NetBoxModelFilterSet
+from netbox.filtersets import NetBoxModelFilterSet, BaseFilterSet
 from dcim.models import Device
 from netbox_config_backup import models
+from netbox_config_backup.choices import FileTypeChoices
 
 
-class BackupFilterSet(NetBoxModelFilterSet):
+class BackupFilterSet(BaseFilterSet):
     q = django_filters.CharFilter(
         method='search',
-        label='Search',
+        label=_('Search'),
     )
     device = django_filters.ModelMultipleChoiceFilter(
         field_name='device__name',
@@ -33,5 +35,30 @@ class BackupFilterSet(NetBoxModelFilterSet):
         qs_filter = (
             Q(name__icontains=value) |
             Q(device__name__icontains=value)
+        )
+        return queryset.filter(qs_filter)
+
+
+class BackupsFilterSet(BaseFilterSet):
+    q = django_filters.CharFilter(
+        method='search',
+        label=_('Search'),
+    )
+    type = django_filters.MultipleChoiceFilter(
+        field_name='file__type',
+        choices=FileTypeChoices,
+        null_value=None
+    )
+
+    class Meta:
+        model = models.BackupCommitTreeChange
+        fields = ['id', 'file']
+
+    def search(self, queryset, name, value):
+        if not value.strip():
+            return queryset
+        qs_filter = (
+            Q(file__type=value) |
+            Q(file__type__startswith=value)
         )
         return queryset.filter(qs_filter)

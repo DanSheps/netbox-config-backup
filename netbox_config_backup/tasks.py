@@ -108,13 +108,11 @@ def backup_config(backup, pk=None):
 
 def backup_job(pk):
     import netmiko
-    #logger.debug(f'[{pk}] Starting backup run')
     try:
         job_result = BackupJob.objects.get(pk=pk)
-        #logger.debug(f'[{pk}] Found existing job')
     except BackupJob.DoesNotExist:
         logger.error(f'Cannot locate job (Id: {pk}) in DB')
-        raise Exception('Cannot locate job (Id: {pk}) in DB')
+        raise Exception(f'Cannot locate job (Id: {pk}) in DB')
     backup = job_result.backup
     delay = timedelta(seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency'))
 

@@ -1,6 +1,10 @@
 {% extends 'netbox_config_backup/base.html' %}
 {% load helpers %}
 
+{% block subtitle %}
+  <div class="object-subtitle"></div>
+{% endblock %}
+
 {% block content %}
 <div class="row">
 	<div class="col col-md-6">
@@ -65,8 +69,5 @@
 	</div>
 	<div class="col col-md-6">
     </div>
-</div>
-<div class="row">
-    {% include 'netbox_config_backup/inc/backup_tables.html' %}
 </div>
 {% endblock %}

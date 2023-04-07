@@ -9,8 +9,9 @@ from django_rq import get_queue
 
 from dcim.models import Device
 from extras.choices import JobResultStatusChoices
+from netbox.models import NetBoxModel
 
-from netbox_config_backup.choices import FileTypeChoices, CommitTreeChangeTypeChoices
+from netbox_config_backup.choices import FileTypeChoices, CommitTreeChangeTypeChoices, StatusChoices
 from netbox_config_backup.helpers import get_repository_dir
 from utilities.querysets import RestrictedQuerySet
 
@@ -24,6 +25,11 @@ logger = logging.getLogger(f"netbox_config_backup")
 class Backup(BigIDModel):
     name = models.CharField(max_length=255, unique=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)
+    status = models.CharField(
+        max_length=50,
+        choices=StatusChoices,
+        default=StatusChoices.STATUS_ACTIVE
+    )
     device = models.ForeignKey(
         to=Device,
         on_delete=models.SET_NULL,
@@ -201,7 +207,7 @@ class BackupFile(BigIDModel):
         unique_together = ['backup', 'type']
 
     def __str__(self):
-        return f'{self.sha}'
+        return f'{self.name}.{self.type}'
 
     @property
     def name(self):
@@ -226,3 +232,7 @@ class BackupCommitTreeChange(BigIDModel):
 
     def filename(self):
         return f'{self.backup.uuid}.{self.type}'
+
+    @property
+    def previous(self):
+        return self.backup.changes.filter(file__type=self.file.type, commit__time__lt=self.commit.time).last()

@@ -19,7 +19,8 @@ def get_backup_tables(instance):
         table = BackupsTable(backups)
         return table
 
-    backups = BackupCommitTreeChange.objects.filter(backup=instance).order_by('commit__time')
+    backups = BackupCommitTreeChange.objects.filter(backup=instance).prefetch_related('backup', 'new', 'old', 'commit',
+                                                                                      'file').order_by('commit__time')
 
     tables = {}
     for file in ['running', 'startup']:

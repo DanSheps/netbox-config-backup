@@ -1,18 +1,18 @@
 import django_tables2 as tables
 from django_tables2.utils import Accessor
 
-from netbox_config_backup.models import Backup
+from netbox_config_backup.models import Backup, BackupCommitTreeChange
 from netbox.tables import columns, BaseTable
 
 
 class ActionButtonsColumn(tables.TemplateColumn):
     attrs = {'td': {'class': 'text-end text-nowrap noprint min-width'}}
     template_code = """
-    <a href="{% url 'plugins:netbox_config_backup:backup_config' pk=record.pk current=record.current.pk %}" class="btn btn-sm btn-outline-dark" title="View">
+    <a href="{% url 'plugins:netbox_config_backup:backup_config' pk=record.backup.pk current=record.pk %}" class="btn btn-sm btn-outline-dark" title="View">
         <i class="mdi mdi-cloud-download"></i>
     </a>
     {% if record.previous %}
-        <a href="{% url 'plugins:netbox_config_backup:backup_diff' pk=record.pk current=record.current.pk previous=record.previous.pk %}" class="btn btn-outline-dark btn-sm" title="Diff">
+        <a href="{% url 'plugins:netbox_config_backup:backup_diff' pk=record.backup.pk current=record.pk previous=record.previous.pk %}" class="btn btn-outline-dark btn-sm" title="Diff">
             <i class="mdi mdi-file-compare"></i>
         </a>
     {% else %}
@@ -56,11 +56,23 @@ class BackupTable(BaseTable):
         )
 
 
-class BackupsTable(tables.Table):
-    date = tables.Column()
+class BackupsTable(BaseTable):
+    date = tables.Column(
+        accessor='commit__time'
+    )
+    type = tables.Column(
+        accessor='file__type'
+    )
     actions = ActionButtonsColumn()
 
     class Meta:
+        model = BackupCommitTreeChange
+        fields = (
+            'date', 'type', 'backup', 'commit', 'file', 'actions'
+        )
+        default_columns = (
+            'date', 'type', 'actions'
+        )
         attrs = {
             'class': 'table table-hover object-list',
         }
