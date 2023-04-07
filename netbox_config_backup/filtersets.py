@@ -1,11 +1,14 @@
 import django_filters
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.utils.translation import gettext as _
 
+from ipam.models import IPAddress
 from netbox.filtersets import NetBoxModelFilterSet, BaseFilterSet
 from dcim.models import Device
 from netbox_config_backup import models
 from netbox_config_backup.choices import FileTypeChoices
+from utilities.filters import MultiValueCharFilter
 
 
 class BackupFilterSet(BaseFilterSet):
@@ -24,19 +27,32 @@ class BackupFilterSet(BaseFilterSet):
         queryset=Device.objects.all(),
         label='Device (ID)',
     )
+    ip = django_filters.CharFilter(
+        method='filter_address',
+        label=_('Address'),
+    )
 
     class Meta:
         model = models.Backup
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'ip']
 
     def search(self, queryset, name, value):
         if not value.strip():
             return queryset
         qs_filter = (
             Q(name__icontains=value) |
-            Q(device__name__icontains=value)
+            Q(device__name__icontains=value) |
+            Q(device__primary_ip4__address__net_host_contained=value) |
+            Q(device__primary_ip6__address__net_host_contained=value) |
+            Q(ip__address__net_host_contained=value)
         )
         return queryset.filter(qs_filter)
+
+    def filter_address(self, queryset, name, value):
+        try:
+            return queryset.filter(ip__address__net_host_contained=value)
+        except ValidationError:
+            return queryset.none()
 
 
 class BackupsFilterSet(BaseFilterSet):
@@ -55,8 +71,10 @@ class BackupsFilterSet(BaseFilterSet):
         fields = ['id', 'file']
 
     def search(self, queryset, name, value):
+        print('Search')
         if not value.strip():
             return queryset
+        print(value)
         qs_filter = (
             Q(file__type=value) |
             Q(file__type__startswith=value)
