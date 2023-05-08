@@ -6,7 +6,8 @@ from dcim.choices import DeviceStatusChoices
 from dcim.models import Device
 from ipam.models import IPAddress
 from netbox_config_backup.models import Backup
-from utilities.forms import BootstrapMixin, DynamicModelChoiceField, DynamicModelMultipleChoiceField
+from utilities.forms import BootstrapMixin
+from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField
 
 __all__ = (
     'BackupForm',
