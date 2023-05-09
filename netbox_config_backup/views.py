@@ -177,7 +177,7 @@ class DiffView(ObjectView):
         label='Diff',
     )
 
-    def get(self, request, pk, current, previous=None):
+    def get(self, request, pk, current=None, previous=None):
         backup = get_object_or_404(Backup.objects.all(), pk=pk)
         if current:
             current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
