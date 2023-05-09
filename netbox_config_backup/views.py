@@ -162,6 +162,7 @@ class ConfigView(ObjectView):
 
         return render(request, 'netbox_config_backup/config.html', {
             'object': backup,
+            'tab': self.tab,
             'backup_config': config,
             'current': current,
             'previous': previous,
@@ -223,6 +224,7 @@ class DiffView(ObjectView):
 
         return render(request, 'netbox_config_backup/diff.html', {
             'object': backup,
+            'tab': self.tab,
             'diff': diff,
             'current': current,
             'previous': previous,
