@@ -1,7 +1,9 @@
 import django_filters
+import netaddr
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.utils.translation import gettext as _
+from netaddr import AddrFormatError
 
 from ipam.models import IPAddress
 from netbox.filtersets import NetBoxModelFilterSet, BaseFilterSet
@@ -42,10 +44,20 @@ class BackupFilterSet(BaseFilterSet):
         qs_filter = (
             Q(name__icontains=value) |
             Q(device__name__icontains=value) |
-            Q(device__primary_ip4__address__net_host_contained=value) |
-            Q(device__primary_ip6__address__net_host_contained=value) |
-            Q(ip__address__net_host_contained=value)
+            Q(device__primary_ip4__address__contains=value.strip()) |
+            Q(device__primary_ip6__address__contains=value.strip()) |
+            Q(ip__address__contains=value.strip())
         )
+
+        try:
+            prefix = str(netaddr.IPNetwork(value.strip()).cidr)
+            qs_filter |= Q(device__primary_ip4__address__net_host_contained=prefix)
+            qs_filter |= Q(device__primary_ip6__address__net_host_contained=prefix)
+            qs_filter |= Q(ip__address__net_host_contained=prefix)
+
+        except (AddrFormatError, ValueError):
+            pass
+
         return queryset.filter(qs_filter)
 
     def filter_address(self, queryset, name, value):
