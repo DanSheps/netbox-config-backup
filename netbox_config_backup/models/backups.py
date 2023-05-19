@@ -22,7 +22,7 @@ from ..utils import Differ
 logger = logging.getLogger(f"netbox_config_backup")
 
 
-class Backup(BigIDModel):
+class Backup(NetBoxModel):
     name = models.CharField(max_length=255, unique=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(

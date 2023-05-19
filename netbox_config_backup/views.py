@@ -76,6 +76,7 @@ class BackupBackupsView(ObjectChildrenView):
     }
     tab = ViewTab(
         label='View Backups',
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup=obj, file__isnull=False).count(),
     )
 
     def get_children(self, request, parent):
