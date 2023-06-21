@@ -10,7 +10,7 @@ __all__ = (
 
 
 class NestedBackupSerializer(WritableNestedSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name='plugins-api:netbox_sync-api:sync-detail')
+    url = serializers.HyperlinkedIdentityField(view_name='plugins-api:netbox_config_backup-api:sync-detail')
 
     class Meta:
         model = Backup
