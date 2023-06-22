@@ -13,7 +13,7 @@ __all__ = (
 
 
 class BackupSerializer(NetBoxModelSerializer):
-    url = serializers.HyperlinkedIdentityField(view_name='plugins-api:netbox_config_backup-api:sync-detail')
+    url = serializers.HyperlinkedIdentityField(view_name='plugins-api:netbox_config_backup-api:backup-detail')
     device = NestedDeviceSerializer()
     ip = NestedIPAddressSerializer()
 
