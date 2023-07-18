@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('unassigned/', views.UnassignedBackupListView.as_view(), name='unassignedbackup_list'),
     path('devices/', views.BackupListView.as_view(), name='backup_list'),
     path('devices/add/', views.BackupEditView.as_view(), name='backup_add'),
     path('devices/<int:pk>/', views.BackupView.as_view(), name='backup'),

@@ -1,7 +1,7 @@
 from extras.plugins import PluginMenuItem, PluginMenuButton, PluginMenu
 from utilities.choices import ButtonColorChoices
 
-item = PluginMenuItem(
+assigned = PluginMenuItem(
     link='plugins:netbox_config_backup:backup_list',
     link_text='Devices',
     permissions=['netbox_config_backup.view_backups'],
@@ -15,9 +15,16 @@ item = PluginMenuItem(
     ]
 )
 
+unassigned = PluginMenuItem(
+    link='plugins:netbox_config_backup:unassignedbackup_list',
+    link_text='Unassigned Backups',
+    permissions=['netbox_config_backup.view_backups'],
+    buttons=[]
+)
+
 menu = PluginMenu(
     label="Configuration Backup",
     groups=(
-        ('Backup Jobs', (item,)),
+        ('Backup Jobs', (assigned, unassigned)),
     )
 )
