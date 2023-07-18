@@ -20,11 +20,19 @@ logger = logging.getLogger(f"netbox_config_backup")
 
 
 class BackupListView(ObjectListView):
-    queryset = Backup.objects.all()
+    queryset = Backup.objects.filter(device__isnull=False)
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
     table = BackupTable
-    action_buttons = ('add',)
+    action_buttons = ('add', )
+
+
+class UnassignedBackupListView(ObjectListView):
+    queryset = Backup.objects.filter(device__isnull=True)
+    filterset = BackupFilterSet
+    filterset_form = BackupFilterSetForm
+    table = BackupTable
+    action_buttons = ()
 
 
 @register_model_view(Backup)
