@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 from django_rq import job
+from netmiko import NetmikoAuthenticationException, NetmikoTimeoutException
 
 from extras.choices import JobResultStatusChoices
 from netbox import settings
@@ -30,7 +31,7 @@ def napalm_init(device, ip=None, extra_args={}):
     password = config.NAPALM_PASSWORD
     timeout = config.NAPALM_TIMEOUT
     optional_args = config.NAPALM_ARGS.copy()
-    if device.platform.napalm_args is not None:
+    if device and device.platform and device.platform.napalm_args is not None:
         optional_args.update(device.platform.napalm_args)
     if extra_args != {}:
         optional_args.update(extra_args)
@@ -73,6 +74,10 @@ def napalm_init(device, ip=None, extra_args={}):
     try:
         d.open()
     except Exception as e:
+        if isinstance(e, NetmikoAuthenticationException):
+            logger.info('Authentication error')
+        elif isinstance(e, NetmikoTimeoutException):
+            logger.info('Connection error')
         raise ServiceUnavailable("Error connecting to the device at {}: {}".format(host, e))
 
     return d
@@ -139,10 +144,11 @@ def backup_job(pk):
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
         logger.error(f'Netmiko read timeout on job: {backup}')
     except ServiceUnavailable as e:
-        logger.error(f'Napalm service read failure on job: {backup}')
+        logger.info(f'Napalm service read failure on job: {backup}')
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
     except Exception as e:
         logger.error(f'Exception at line 148 on job: {backup}')
+        logger.error(e.with_traceback())
         job_result.set_status(JobResultStatusChoices.STATUS_FAILED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 
