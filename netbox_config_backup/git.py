@@ -39,7 +39,7 @@ class GitBackup:
             self.repository = repo.Repo(self.location)
 
         if self.repository is None:
-            self.repository = repo.Repo.init(self.location, True)
+            self.repository = repo.Repo.init(path=self.location, mkdir=True)
 
         if self.repository is not None:
             try:
