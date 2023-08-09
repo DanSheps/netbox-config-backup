@@ -13,6 +13,31 @@ from netbox_config_backup.models.jobs import BackupJob
 logger = logging.getLogger(f"netbox_config_backup")
 
 
+def can_backup(backup):
+    if backup.device is None:
+        logger.info(f'No device for {backup}')
+        return False
+    elif backup.status == StatusChoices.STATUS_DISABLED:
+        logger.info(f'Backup disabled for {backup}')
+        return False
+    elif backup.device.status in [DeviceStatusChoices.STATUS_OFFLINE,
+                                DeviceStatusChoices.STATUS_FAILED,
+                                DeviceStatusChoices.STATUS_INVENTORY,
+                                DeviceStatusChoices.STATUS_PLANNED]:
+        logger.info(f'Backup disabled for {backup} due to device status ({backup.device.status})')
+        return False
+    elif (backup.ip is None and backup.device.primary_ip is None) or backup.device.platform is None or \
+            backup.device.platform.napalm_driver == '' or backup.device.platform.napalm_driver is None:
+        if backup.ip is None and backup.device.primary_ip is None:
+            logger.error(f'Backup disabled for {backup} due to no primary IP ({backup.device.status})')
+        elif backup.device.platform is None:
+            logger.error(f'Backup disabled for {backup} due to platform not set ({backup.device.status})')
+        elif backup.device.platform.napalm_driver == '' or backup.device.platform.napalm_driver is None:
+            logger.error(f'Backup disabled for {backup} due to napalm driver not set ({backup.device.status})')
+        return False
+
+    return True
+
 def enqueue(backup, delay=None):
     from netbox_config_backup.models import BackupJob
 
@@ -64,24 +89,10 @@ def needs_enqueue(backup, job_id=None):
     scheduled_jobs = scheduled.get_job_ids()
     started_jobs = started.get_job_ids()
 
-    if backup.device is None:
-        print(f'No device for {backup}')
-        return False
-    elif backup.status == StatusChoices.STATUS_DISABLED:
-        print(f'Backup disabled for {backup}')
-        return False
-    elif backup.device.status in [DeviceStatusChoices.STATUS_OFFLINE,
-                                DeviceStatusChoices.STATUS_FAILED,
-                                DeviceStatusChoices.STATUS_INVENTORY,
-                                DeviceStatusChoices.STATUS_PLANNED]:
-        print(f'Backup disabled for {backup} due to device status ({backup.device.status})')
-        return False
-    elif (backup.ip is None and backup.device.primary_ip is None) or backup.device.platform is None or \
-            backup.device.platform.napalm_driver == '' or backup.device.platform.napalm_driver is None:
-        print(f'Backup disabled for {backup} due to napalm drive or no primary IP ({backup.device.status})')
+    if not can_backup(backup):
         return False
     elif is_queued(backup, job_id):
-        print(f'Backup already queued for {backup}')
+        logger.info(f'Backup already queued for {backup}')
         return False
 
     return True
