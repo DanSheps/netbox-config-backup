@@ -42,6 +42,10 @@ class BackupView(ObjectView):
 
     def get_extra_context(self, request, instance):
 
+        if BackupJob.is_queued(instance) is False:
+            logger.debug(f'{instance}: Queuing Job')
+            BackupJob.enqueue_if_needed(instance)
+
         jobs = BackupJob.objects.filter(backup=instance).order_by()
         is_running = True if jobs.filter(status=JobResultStatusChoices.STATUS_RUNNING).count() > 0 else False
         is_pending = True if jobs.filter(status=JobResultStatusChoices.STATUS_PENDING).count() > 0 else False
@@ -51,10 +55,6 @@ class BackupView(ObjectView):
             job_status = 'Pending'
         if is_running:
             job_status = 'Running'
-
-        if BackupJob.is_queued(instance) is False:
-            logger.debug(f'{instance}: Queuing Job')
-            BackupJob.enqueue_if_needed(instance)
 
         status = {
             'status': job_status,
