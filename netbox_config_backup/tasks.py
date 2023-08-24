@@ -142,13 +142,13 @@ def backup_job(pk):
             logger.error(f'\tException: {e}')
     except netmiko.exceptions.ReadTimeout as e:
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
-        logger.error(f'Netmiko read timeout on job: {backup}')
+        logger.warning(f'Netmiko read timeout on job: {backup}')
     except ServiceUnavailable as e:
         logger.info(f'Napalm service read failure on job: {backup}')
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
     except Exception as e:
         logger.error(f'Exception at line 148 on job: {backup}')
-        logger.error(e.with_traceback())
+        logger.error(e)
         job_result.set_status(JobResultStatusChoices.STATUS_FAILED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 

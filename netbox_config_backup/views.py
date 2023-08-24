@@ -77,10 +77,11 @@ class BackupBackupsView(ObjectChildrenView):
     child_model = BackupCommitTreeChange
     table = BackupsTable
     filterset = BackupsFilterSet
-    actions = ['config', 'diff']
+    actions = ['config', 'diff', 'bulk_diff']
     action_perms = {
         'config': {'view'},
         'diff': {'view'},
+        'bulk_diff': {'view'},
     }
     tab = ViewTab(
         label='View Backups',
@@ -145,8 +146,8 @@ class ConfigView(ObjectView):
         label='Configuration',
     )
 
-    def get(self, request, pk, current=None):
-        backup = get_object_or_404(Backup.objects.all(), pk=pk)
+    def get(self, request, backup, current=None):
+        backup = get_object_or_404(Backup.objects.all(), pk=backup)
         if current:
             current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
         else:
@@ -187,8 +188,31 @@ class DiffView(ObjectView):
         label='Diff',
     )
 
-    def get(self, request, pk, current=None, previous=None):
-        backup = get_object_or_404(Backup.objects.all(), pk=pk)
+    def post(self, request, backup, *args, **kwargs):
+        if request.POST.get('_all') and self.filterset is not None:
+            queryset = self.filterset(request.GET, self.parent_model.objects.only('pk'), request=request).qs
+            pk_list = [obj.pk for obj in queryset]
+        else:
+            pk_list = [int(pk) for pk in request.POST.getlist('pk')]
+
+        backups = pk_list[:2]
+        print(pk_list)
+        print(backups)
+
+        if len(backups) == 2:
+            current = int(backups[0])
+            previous = int(backups[1])
+        elif len(backups) == 1:
+            current = int(backups[0])
+            previous = None
+        else:
+            current = None
+            previous = None
+
+        return self.get(request=request, backup=backup, current=current, previous=previous)
+
+    def get(self, request, backup, current=None, previous=None):
+        backup = get_object_or_404(Backup.objects.all(), pk=backup)
         if current:
             current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
         else:
@@ -210,21 +234,21 @@ class DiffView(ObjectView):
                     "No Previous Commit"
                 )
 
-        path = f'{current.file.path}'
-
         repo = GitBackup()
 
         previous_sha = previous.commit.sha if previous.commit is not None else 'HEAD'
         current_sha = current.commit.sha if current.commit is not None else None
 
+        print(f'Diffs: {current_sha}:{previous_sha}')
+
         if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
-            new = repo.read(path, current_sha)
-            old = repo.read(path, previous_sha)
+            new = repo.read(current.file.path, current_sha)
+            old = repo.read(previous.file.path, previous_sha)
             differ = Differ(old, new)
             diff = differ.cisco_compare()
         else:
-            new = repo.read(path, current_sha)
-            old = repo.read(path, previous_sha)
+            new = repo.read(current.file.path, current_sha)
+            old = repo.read(previous.file.path, previous_sha)
             differ = Differ(old, new)
             diff = differ.compare()
 

@@ -226,12 +226,15 @@ class BackupCommitTreeChange(BigIDModel):
     type = models.CharField(max_length=10)
     old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True)
     new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True)
-
+    
     def __str__(self):
         return f'{self.commit.sha}-{self.type}'
 
     def filename(self):
         return f'{self.backup.uuid}.{self.type}'
+
+    def get_absolute_url(self):
+        return reverse('plugins:netbox_config_backup:backup_config', kwargs={'backup': self.backup.pk, 'current': self.pk})
 
     @property
     def previous(self):
