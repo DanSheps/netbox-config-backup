@@ -26,11 +26,12 @@ def get_logger():
 
 
 def napalm_init(device, ip=None, extra_args={}):
-    config = get_config()
-    username = config.NAPALM_USERNAME
-    password = config.NAPALM_PASSWORD
-    timeout = config.NAPALM_TIMEOUT
-    optional_args = config.NAPALM_ARGS.copy()
+    from netbox import settings
+    username = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_USERNAME', None)
+    password = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_PASSWORD', None)
+    timeout = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_TIMEOUT', None)
+    optional_args = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_ARGS', []).copy()
+
     if device and device.platform and device.platform.napalm_args is not None:
         optional_args.update(device.platform.napalm_args)
     if extra_args != {}:
