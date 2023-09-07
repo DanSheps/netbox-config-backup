@@ -3,6 +3,7 @@ import datetime
 import uuid as uuid
 
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
 
 from django_rq import get_queue
@@ -89,7 +90,14 @@ class Backup(NetBoxModel):
         return enqueue_if_needed(self)
 
     def requeue(self):
-        self.jobs.all().delete()
+        self.jobs.filter(
+            ~Q(status=JobResultStatusChoices.STATUS_COMPLETED) &
+            ~Q(status=JobResultStatusChoices.STATUS_FAILED) &
+            ~Q(status=JobResultStatusChoices.STATUS_ERRORED)
+        ).update(
+            status=JobResultStatusChoices.STATUS_FAILED
+        )
+        remove_queued(self)
         self.enqueue_if_needed()
 
     def get_config(self, index='HEAD'):
@@ -226,12 +234,15 @@ class BackupCommitTreeChange(BigIDModel):
     type = models.CharField(max_length=10)
     old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True)
     new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True)
-
+    
     def __str__(self):
         return f'{self.commit.sha}-{self.type}'
 
     def filename(self):
         return f'{self.backup.uuid}.{self.type}'
+
+    def get_absolute_url(self):
+        return reverse('plugins:netbox_config_backup:backup_config', kwargs={'backup': self.backup.pk, 'current': self.pk})
 
     @property
     def previous(self):

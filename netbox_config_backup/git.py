@@ -3,6 +3,7 @@ import difflib
 from datetime import datetime
 from time import sleep
 
+from deepdiff import DeepDiff
 from dulwich import repo, porcelain, object_store
 from pydriller import Git
 
