@@ -196,8 +196,6 @@ class DiffView(ObjectView):
             pk_list = [int(pk) for pk in request.POST.getlist('pk')]
 
         backups = pk_list[:2]
-        print(pk_list)
-        print(backups)
 
         if len(backups) == 2:
             current = int(backups[0])
