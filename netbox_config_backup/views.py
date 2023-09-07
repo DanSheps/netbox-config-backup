@@ -239,9 +239,7 @@ class DiffView(ObjectView):
         previous_sha = previous.commit.sha if previous.commit is not None else 'HEAD'
         current_sha = current.commit.sha if current.commit is not None else None
 
-        print(f'Diffs: {current_sha}:{previous_sha}')
-
-        if backup.device and backup.device.platform.napalm_driver in ['ios', 'nxos']:
+        if backup.device and backup.device.platform.napalm.napalm_driver in ['ios', 'nxos']:
             new = repo.read(current.file.path, current_sha)
             old = repo.read(previous.file.path, previous_sha)
             differ = Differ(old, new)

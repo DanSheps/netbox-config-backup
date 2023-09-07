@@ -3,6 +3,7 @@ import datetime
 import uuid as uuid
 
 from django.db import models
+from django.db.models import Q
 from django.urls import reverse
 
 from django_rq import get_queue
@@ -89,7 +90,14 @@ class Backup(NetBoxModel):
         return enqueue_if_needed(self)
 
     def requeue(self):
-        self.jobs.all().delete()
+        self.jobs.filter(
+            ~Q(status=JobResultStatusChoices.STATUS_COMPLETED) &
+            ~Q(status=JobResultStatusChoices.STATUS_FAILED) &
+            ~Q(status=JobResultStatusChoices.STATUS_ERRORED)
+        ).update(
+            status=JobResultStatusChoices.STATUS_FAILED
+        )
+        remove_queued(self)
         self.enqueue_if_needed()
 
     def get_config(self, index='HEAD'):

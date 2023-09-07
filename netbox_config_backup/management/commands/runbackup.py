@@ -30,6 +30,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from netbox_config_backup.models import Backup
         if options['device']:
+            print(f'Running:{options.get("device")}| ')
             backup = Backup.objects.filter(device__name=options['device']).first()
             if backup:
                 self.run_backup(backup)

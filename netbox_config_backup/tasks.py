@@ -12,6 +12,8 @@ from netbox import settings
 from netbox.api.exceptions import ServiceUnavailable
 from netbox.config import get_config
 from netbox_config_backup.models import Backup, BackupJob, BackupCommit
+from netbox_config_backup.utils.rq import can_backup
+
 
 def get_logger():
     # Setup logging to Stdout
@@ -32,8 +34,8 @@ def napalm_init(device, ip=None, extra_args={}):
     timeout = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_TIMEOUT', None)
     optional_args = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_ARGS', []).copy()
 
-    if device and device.platform and device.platform.napalm_args is not None:
-        optional_args.update(device.platform.napalm_args)
+    if device and device.platform and device.platform.napalm.napalm_args is not None:
+        optional_args.update(device.platform.napalm.napalm_args)
     if extra_args != {}:
         optional_args.update(extra_args)
 
@@ -58,10 +60,10 @@ def napalm_init(device, ip=None, extra_args={}):
 
     # Validate the configured driver
     try:
-        driver = napalm.get_network_driver(device.platform.napalm_driver)
+        driver = napalm.get_network_driver(device.platform.napalm.napalm_driver)
     except ModuleImportError:
         raise ServiceUnavailable("NAPALM driver for platform {} not found: {}.".format(
-            device.platform, device.platform.napalm_driver
+            device.platform, device.platform.napalm.napalm_driver
         ))
 
     # Connect to the device
@@ -90,6 +92,9 @@ def backup_config(backup, pk=None):
         ip = backup.ip if backup.ip is not None else backup.device.primary_ip
     else:
         ip = None
+    if not can_backup(backup):
+        raise Exception(f'Cannot backup {backup}')
+
     if backup.device is not None and ip is not None:
         logger.info(f'{backup}: Backup started')
         #logger.debug(f'[{pk}] Connecting')
@@ -120,6 +125,10 @@ def backup_job(pk):
         logger.error(f'Cannot locate job (Id: {pk}) in DB')
         raise Exception(f'Cannot locate job (Id: {pk}) in DB')
     backup = job_result.backup
+
+    if not can_backup(backup):
+        logger.warning(f'Cannot backup due to additional factors')
+        return 1
     delay = timedelta(seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency'))
 
     job_result.started = timezone.now()
@@ -136,6 +145,11 @@ def backup_job(pk):
         # Enqueue next job if one doesn't exist
         try:
             #logger.debug(f'[{pk}] Starting Enqueue')
+            BackupJob.objects.filter(
+                backup=backup
+            ).exclude(
+                status__in=JobResultStatusChoices.TERMINAL_STATE_CHOICES
+            ).update(status=JobResultStatusChoices.STATUS_FAILED)
             BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
             #logger.debug(f'[{pk}] Finished Enqueue')
         except Exception as e:
@@ -150,19 +164,11 @@ def backup_job(pk):
     except Exception as e:
         logger.error(f'Exception at line 148 on job: {backup}')
         logger.error(e)
-        job_result.set_status(JobResultStatusChoices.STATUS_FAILED)
+        job_result.set_status(JobResultStatusChoices.STATUS_ERRORED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 
     #logger.debug(f'[{pk}] Saving result')
     job_result.save()
-
-    # Clear queue of old jobs
-    BackupJob.objects.filter(
-        backup=backup,
-        status__in=JobResultStatusChoices.TERMINAL_STATE_CHOICES
-    ).exclude(
-        pk=job_result.pk
-    ).delete()
 
 
 logger = get_logger()
