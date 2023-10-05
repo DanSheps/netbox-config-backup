@@ -41,12 +41,8 @@ class BackupTable(BaseTable):
             'args': [Accessor('device_id')],
         }
     )
-    last_backup = tables.DateTimeColumn(
-        orderable=False
-    )
-    next_attempt = tables.DateTimeColumn(
-        orderable=False
-    )
+    last_backup = tables.DateTimeColumn()
+    next_attempt = tables.DateTimeColumn()
 
     class Meta(BaseTable.Meta):
         model = Backup
