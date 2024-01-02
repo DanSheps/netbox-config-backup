@@ -1,5 +1,6 @@
 import logging
 
+from django.db import models
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse, NoReverseMatch
@@ -20,7 +21,18 @@ logger = logging.getLogger(f"netbox_config_backup")
 
 
 class BackupListView(ObjectListView):
-    queryset = Backup.objects.filter(device__isnull=False)
+    queryset = Backup.objects.filter(device__isnull=False).prefetch_related('jobs').annotate(
+        last_backup=models.Subquery(
+            BackupJob.objects.filter(backup=models.OuterRef('id'), status=JobResultStatusChoices.STATUS_COMPLETED).order_by('completed').values('completed')[:1]
+        ),
+        next_attempt=models.Subquery(
+            BackupJob.objects.filter(backup=models.OuterRef('id'), status__in=['pending', 'running']).order_by('scheduled').values('scheduled')[:1]
+        ),
+        last_change=models.Subquery(
+            BackupCommitTreeChange.objects.filter(backup=models.OuterRef('id')).values('commit__time')[:1]
+        )
+    )
+
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
     table = BackupTable
@@ -28,7 +40,17 @@ class BackupListView(ObjectListView):
 
 
 class UnassignedBackupListView(ObjectListView):
-    queryset = Backup.objects.filter(device__isnull=True)
+    queryset = Backup.objects.filter(device__isnull=True).annotate(
+        last_backup=models.Subquery(
+            BackupJob.objects.filter(backup=models.OuterRef('id'), status=JobResultStatusChoices.STATUS_COMPLETED).order_by('completed').values('completed')[:1]
+        ),
+        next_attempt=models.Subquery(
+            BackupJob.objects.filter(backup=models.OuterRef('id'), status__in=['pending', 'running']).order_by('scheduled').values('scheduled')[:1]
+        ),
+        last_change=models.Subquery(
+            BackupCommitTreeChange.objects.filter(backup=models.OuterRef('id')).values('commit__time')[:1]
+        )
+    )
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
     table = BackupTable
@@ -196,8 +218,6 @@ class DiffView(ObjectView):
             pk_list = [int(pk) for pk in request.POST.getlist('pk')]
 
         backups = pk_list[:2]
-        print(pk_list)
-        print(backups)
 
         if len(backups) == 2:
             current = int(backups[0])

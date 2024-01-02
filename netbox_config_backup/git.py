@@ -80,6 +80,9 @@ class GitBackup:
             try:
                 commit = porcelain.commit(self.repository, message, committer=committer, author=author)
                 return commit.decode('ascii')
+            except repo.InvalidUserIdentity:
+                committer = 'Your NetBox is misconfigured <netbox@localhost>'.encode('ascii')
+                author = 'Your NetBox is misconfigured <netbox@localhost>'.encode('ascii')
             except FileExistsError:
                 sleep(1)
                 failures = failures + 1
