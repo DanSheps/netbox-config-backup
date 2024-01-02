@@ -13,7 +13,7 @@ class NetboxConfigBackup(PluginConfig):
     author_email = metadata.get('Author-email')
     base_url = 'configbackup'
     min_version = '3.5.8'
-    max_version = '3.6.99'
+    max_version = '3.7.99'
     required_settings = [
         'repository',
         'committer',
