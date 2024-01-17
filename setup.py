@@ -12,7 +12,7 @@ setup(
     maintainer='Daniel Sheppard',
     maintainer_email='dans@dansheps.com',
     install_requires=[
-        'netmiko>=4.0.0'
+        'netmiko>=4.0.0',
         'napalm',
         'uuid',
         'dulwich',
