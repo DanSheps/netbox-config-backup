@@ -87,6 +87,8 @@ class Backup(NetBoxModel):
         return {'running': running if running is not None else '', 'startup': startup if startup is not None else ''}
 
     def set_config(self, configs, files=('running', 'startup'), pk=None):
+        from netbox_config_backup.models.repository import (BackupCommit, BackupObject, BackupFile,
+                                                            BackupCommitTreeChange)
         from netbox_config_backup.git import repository
         LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
