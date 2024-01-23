@@ -50,26 +50,6 @@ class Backup(NetBoxModel):
         ordering = ['name']
 
     @property
-    def last_backup(self):
-        job = self.jobs.filter(status=JobResultStatusChoices.STATUS_COMPLETED).order_by('completed').last()
-        if job is not None:
-            return job.completed
-        return None
-
-    @property
-    def next_attempt(self):
-        job = self.jobs.filter(status__in=['pending', 'running']).order_by('scheduled').last()
-        if job is not None:
-            return job.scheduled
-        return None
-
-    @property
-    def last_change(self):
-        if self.changes.count() == 0:
-            return None
-        return self.changes.last().commit.time
-
-    @property
     def backup_count(self):
         return self.changes.count()
 
