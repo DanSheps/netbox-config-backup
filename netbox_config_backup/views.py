@@ -21,17 +21,7 @@ logger = logging.getLogger(f"netbox_config_backup")
 
 
 class BackupListView(ObjectListView):
-    queryset = Backup.objects.filter(device__isnull=False).prefetch_related('jobs').annotate(
-        last_backup=models.Subquery(
-            BackupJob.objects.filter(backup=models.OuterRef('id'), status=JobResultStatusChoices.STATUS_COMPLETED).order_by('completed').values('completed')[:1]
-        ),
-        next_attempt=models.Subquery(
-            BackupJob.objects.filter(backup=models.OuterRef('id'), status__in=['pending', 'running']).order_by('scheduled').values('scheduled')[:1]
-        ),
-        last_change=models.Subquery(
-            BackupCommitTreeChange.objects.filter(backup=models.OuterRef('id')).values('commit__time')[:1]
-        )
-    )
+    queryset = Backup.objects.filter(device__isnull=False).default_annotate()
 
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
@@ -40,17 +30,8 @@ class BackupListView(ObjectListView):
 
 
 class UnassignedBackupListView(ObjectListView):
-    queryset = Backup.objects.filter(device__isnull=True).annotate(
-        last_backup=models.Subquery(
-            BackupJob.objects.filter(backup=models.OuterRef('id'), status=JobResultStatusChoices.STATUS_COMPLETED).order_by('completed').values('completed')[:1]
-        ),
-        next_attempt=models.Subquery(
-            BackupJob.objects.filter(backup=models.OuterRef('id'), status__in=['pending', 'running']).order_by('scheduled').values('scheduled')[:1]
-        ),
-        last_change=models.Subquery(
-            BackupCommitTreeChange.objects.filter(backup=models.OuterRef('id')).values('commit__time')[:1]
-        )
-    )
+    queryset = Backup.objects.filter(device__isnull=True).default_annotate()
+
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
     table = BackupTable
@@ -59,7 +40,7 @@ class UnassignedBackupListView(ObjectListView):
 
 @register_model_view(Backup)
 class BackupView(ObjectView):
-    queryset = Backup.objects.all()
+    queryset = Backup.objects.all().default_annotate()
     template_name = 'netbox_config_backup/backup.html'
 
     def get_extra_context(self, request, instance):
@@ -94,7 +75,8 @@ class BackupView(ObjectView):
 
 @register_model_view(Backup, name='backups')
 class BackupBackupsView(ObjectChildrenView):
-    queryset = Backup.objects.all()
+    queryset = Backup.objects.all().default_annotate()
+
     template_name = 'netbox_config_backup/backups.html'
     child_model = BackupCommitTreeChange
     table = BackupsTable

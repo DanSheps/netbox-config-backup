@@ -12,12 +12,11 @@ from dcim.models import Device
 from extras.choices import JobResultStatusChoices
 from netbox.models import NetBoxModel
 
-from netbox_config_backup.choices import FileTypeChoices, CommitTreeChangeTypeChoices, StatusChoices
+from netbox_config_backup.choices import StatusChoices
 from netbox_config_backup.helpers import get_repository_dir
-from utilities.querysets import RestrictedQuerySet
 
-from .abstract import BigIDModel
 from netbox_config_backup.utils.rq import remove_queued
+from ..querysets import BackupQuerySet
 from ..utils import Differ
 
 logger = logging.getLogger(f"netbox_config_backup")
@@ -44,30 +43,10 @@ class Backup(NetBoxModel):
         null=True
     )
 
-    objects = RestrictedQuerySet.as_manager()
+    objects = BackupQuerySet.as_manager()
 
     class Meta:
         ordering = ['name']
-
-    @property
-    def last_backup(self):
-        job = self.jobs.filter(status=JobResultStatusChoices.STATUS_COMPLETED).order_by('completed').last()
-        if job is not None:
-            return job.completed
-        return None
-
-    @property
-    def next_attempt(self):
-        job = self.jobs.filter(status__in=['pending', 'running']).order_by('scheduled').last()
-        if job is not None:
-            return job.scheduled
-        return None
-
-    @property
-    def last_change(self):
-        if self.changes.count() == 0:
-            return None
-        return self.changes.last().commit.time
 
     @property
     def backup_count(self):
@@ -88,12 +67,6 @@ class Backup(NetBoxModel):
     def enqueue_if_needed(self):
         from netbox_config_backup.utils.rq import enqueue_if_needed
         return enqueue_if_needed(self)
-
-    def clean(self):
-        if not self.device and self.ip:
-            self.ip = None
-
-        super().clean()
 
     def requeue(self):
         self.jobs.filter(
@@ -196,60 +169,3 @@ class Backup(NetBoxModel):
     @classmethod
     def get_repository_dir(cls):
         return get_repository_dir()
-
-
-class BackupCommit(BigIDModel):
-    sha = models.CharField(max_length=64)
-    time = models.DateTimeField()
-
-    def __str__(self):
-        return self.sha
-
-
-class BackupObject(BigIDModel):
-    sha = models.CharField(max_length=64, unique=True)
-
-    def __str__(self):
-        return f'{self.sha}'
-
-
-class BackupFile(BigIDModel):
-    backup = models.ForeignKey(to=Backup, on_delete=models.CASCADE, null=False, blank=False, related_name='files')
-    type = models.CharField(max_length=10, choices=FileTypeChoices, null=False, blank=False)
-
-    class Meta:
-        unique_together = ['backup', 'type']
-
-    def __str__(self):
-        return f'{self.name}.{self.type}'
-
-    @property
-    def name(self):
-        return f'{self.backup.uuid}'
-
-    @property
-    def path(self):
-        return f'{self.name}.{self.type}'
-
-
-class BackupCommitTreeChange(BigIDModel):
-    backup = models.ForeignKey(to=Backup, on_delete=models.CASCADE, null=False, blank=False, related_name='changes')
-    file = models.ForeignKey(to=BackupFile, on_delete=models.CASCADE, null=False, blank=False, related_name='changes')
-
-    commit = models.ForeignKey(to=BackupCommit, on_delete=models.PROTECT, related_name='changes')
-    type = models.CharField(max_length=10)
-    old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True)
-    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True)
-    
-    def __str__(self):
-        return f'{self.commit.sha}-{self.type}'
-
-    def filename(self):
-        return f'{self.backup.uuid}.{self.type}'
-
-    def get_absolute_url(self):
-        return reverse('plugins:netbox_config_backup:backup_config', kwargs={'backup': self.backup.pk, 'current': self.pk})
-
-    @property
-    def previous(self):
-        return self.backup.changes.filter(file__type=self.file.type, commit__time__lt=self.commit.time).last()
