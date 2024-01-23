@@ -1,4 +1,5 @@
 from django import forms
+from django.core.exceptions import ValidationError
 from django.forms import CharField
 from django.utils.translation import gettext as _
 
@@ -20,9 +21,9 @@ class BackupForm(BootstrapMixin, forms.ModelForm):
         label='Device',
         required=False,
         queryset=Device.objects.all(),
+        help_text='The device this backup operates on',
         query_params={
             'status': [DeviceStatusChoices.STATUS_ACTIVE],
-            'platform__napalm__ne': None,
             'has_primary_ip': True,
         },
     )
@@ -30,18 +31,27 @@ class BackupForm(BootstrapMixin, forms.ModelForm):
         label='IP Address',
         required=False,
         queryset=IPAddress.objects.all(),
+        help_text='This field requires the device to be set',
         query_params={
-            'device_id': '$device'
-        }
+            'device_id': '$device',
+            'assigned_to_interface': True
+        },
     )
     class Meta:
         model = Backup
-        fields = ('name', 'device', 'status', 'ip')
+        fields = ('name', 'device', 'ip', 'status')
 
     def clean(self):
         super().clean()
-        if self.cleaned_data.get('device', None) == None:
-            self.cleaned_data['ip'] = None
+        if self.cleaned_data.get('ip') and not self.cleaned_data.get('device'):
+            raise ValidationError({'ip': f'Device must be set'})
+
+        if self.cleaned_data.get('device'):
+            device = self.cleaned_data.get('device')
+            if not device.platform:
+                raise ValidationError({'device': f'{device} has no platform set'})
+            elif not hasattr(device.platform, 'napalm'):
+                raise ValidationError({'device': f'{device}\'s platform ({device.platform}) has no napalm driver'})
 
 
 class BackupFilterSetForm(BootstrapMixin, forms.Form):
