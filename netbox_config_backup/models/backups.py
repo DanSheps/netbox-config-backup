@@ -89,6 +89,12 @@ class Backup(NetBoxModel):
         from netbox_config_backup.utils.rq import enqueue_if_needed
         return enqueue_if_needed(self)
 
+    def clean(self):
+        if not self.device and self.ip:
+            self.ip = None
+
+        super().clean()
+
     def requeue(self):
         self.jobs.filter(
             ~Q(status=JobResultStatusChoices.STATUS_COMPLETED) &
