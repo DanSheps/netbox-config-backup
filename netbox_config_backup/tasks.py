@@ -164,6 +164,7 @@ def backup_job(pk):
     except Exception as e:
         logger.error(f'Uncaught Exception on job: {backup}')
         logger.error(e)
+        logger.warning(traceback.format_exc())
         job_result.set_status(JobResultStatusChoices.STATUS_ERRORED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 
