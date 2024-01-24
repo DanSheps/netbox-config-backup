@@ -49,8 +49,23 @@ class Backup(NetBoxModel):
         ordering = ['name']
 
     @property
-    def backup_count(self):
-        return self.changes.count()
+    def last_backup(self):
+        return self.jobs.filter(status=JobResultStatusChoices.STATUS_COMPLETED).last().completed
+
+    @property
+    def next_attempt(self):
+        return self.jobs.filter(
+            status__in=[
+                JobResultStatusChoices.STATUS_SCHEDULED,
+                JobResultStatusChoices.STATUS_PENDING,
+                JobResultStatusChoices.STATUS_RUNNING
+            ]
+        ).last().scheduled
+
+    @property
+    def last_change(self):
+
+        return self.changes.last().commit.time
 
     def get_absolute_url(self):
         return reverse('plugins:netbox_config_backup:backup', args=[self.pk])

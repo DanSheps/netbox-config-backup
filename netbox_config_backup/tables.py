@@ -43,15 +43,22 @@ class BackupTable(BaseTable):
     )
     last_backup = tables.DateTimeColumn()
     next_attempt = tables.DateTimeColumn()
+    last_change = tables.DateTimeColumn()
+    backup_count = tables.Column(
+        accessor='changes'
+    )
 
     class Meta(BaseTable.Meta):
         model = Backup
         fields = (
-            'pk', 'name', 'device', 'last_backup', 'next_attempt', 'backup_count'
+            'pk', 'name', 'device', 'last_backup', 'next_attempt', 'last_change', 'backup_count'
         )
         default_columns = (
             'pk', 'name', 'device', 'last_backup', 'next_attempt', 'backup_count'
         )
+
+    def render_backup_count(self, value):
+        return f'{value.count()}'
 
 
 class BackupsTable(NetBoxTable):
