@@ -81,11 +81,10 @@ class BackupBackupsView(ObjectChildrenView):
     child_model = BackupCommitTreeChange
     table = BackupsTable
     filterset = BackupsFilterSet
-    actions = ['config', 'diff', 'bulk_diff']
-    action_perms = {
+    actions = {
         'config': {'view'},
         'diff': {'view'},
-        'bulk_diff': {'view'},
+        'bulk_diff': {'view'}
     }
     tab = ViewTab(
         label='View Backups',

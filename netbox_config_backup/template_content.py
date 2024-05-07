@@ -1,6 +1,7 @@
 import logging
 
 from netbox.plugins import PluginTemplateExtension
+
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange
 from netbox_config_backup.tables import BackupsTable
 from netbox_config_backup.utils.backups import get_backup_tables
