@@ -1,11 +1,10 @@
 import logging
 
-from extras.plugins import PluginTemplateExtension
-
+from netbox.plugins import PluginTemplateExtension
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange
 from netbox_config_backup.tables import BackupsTable
 from netbox_config_backup.utils.backups import get_backup_tables
-from utilities.htmx import is_htmx
+from utilities.htmx import htmx_partial
 
 logger = logging.getLogger(f"netbox_config_backup")
 
@@ -35,7 +34,7 @@ class DeviceBackups(PluginTemplateExtension):
                 logger.debug(f'{instance}: Queuing Job')
                 BackupJob.enqueue(instance)
 
-            if is_htmx(request):
+            if htmx_partial(request):
                 return self.render('htmx/table.html', extra_context={
                     'object': instance,
                     'table': table,

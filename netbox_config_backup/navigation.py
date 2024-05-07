@@ -1,5 +1,5 @@
-from extras.plugins import PluginMenuItem, PluginMenuButton, PluginMenu
-from utilities.choices import ButtonColorChoices
+from netbox.choices import ButtonColorChoices
+from netbox.plugins import PluginMenuItem, PluginMenuButton, PluginMenu
 
 assigned = PluginMenuItem(
     link='plugins:netbox_config_backup:backup_list',
