@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='netbox_config_backup',
-    version='2.0.0',
+    version='2.0.1',
     description='NetBox Configuration Backup',
     long_description='Plugin to backup device configuration',
     url='https://github.com/dansheps/netbox-config-backup/',

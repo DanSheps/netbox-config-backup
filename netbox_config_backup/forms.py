@@ -7,7 +7,6 @@ from dcim.choices import DeviceStatusChoices
 from dcim.models import Device
 from ipam.models import IPAddress
 from netbox_config_backup.models import Backup
-from utilities.forms import BootstrapMixin
 from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField
 
 __all__ = (
@@ -16,7 +15,7 @@ __all__ = (
 )
 
 
-class BackupForm(BootstrapMixin, forms.ModelForm):
+class BackupForm(forms.ModelForm):
     device = DynamicModelChoiceField(
         label='Device',
         required=False,
@@ -54,7 +53,7 @@ class BackupForm(BootstrapMixin, forms.ModelForm):
                 raise ValidationError({'device': f'{device}\'s platform ({device.platform}) has no napalm driver'})
 
 
-class BackupFilterSetForm(BootstrapMixin, forms.Form):
+class BackupFilterSetForm(forms.Form):
     model = Backup
     field_order = [
         'q', 'name', 'device_id', 'ip'
@@ -68,7 +67,6 @@ class BackupFilterSetForm(BootstrapMixin, forms.Form):
         queryset=Device.objects.all(),
         required=False,
         label=_('Device'),
-        fetch_trigger='open',
         query_params={
             'status': [DeviceStatusChoices.STATUS_ACTIVE],
             'platform__napalm__ne': None,

@@ -48,10 +48,6 @@ class Backup(NetBoxModel):
     class Meta:
         ordering = ['name']
 
-    @property
-    def backup_count(self):
-        return self.changes.count()
-
     def get_absolute_url(self):
         return reverse('plugins:netbox_config_backup:backup', args=[self.pk])
 
