@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse, NoReverseMatch
 from django.views import View
 
-from extras.choices import JobResultStatusChoices
+from core.choices import JobStatusChoices
 from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView
 from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet
 
@@ -50,8 +50,8 @@ class BackupView(ObjectView):
             BackupJob.enqueue_if_needed(instance)
 
         jobs = BackupJob.objects.filter(backup=instance).order_by()
-        is_running = True if jobs.filter(status=JobResultStatusChoices.STATUS_RUNNING).count() > 0 else False
-        is_pending = True if jobs.filter(status=JobResultStatusChoices.STATUS_PENDING).count() > 0 else False
+        is_running = True if jobs.filter(status=JobStatusChoices.STATUS_RUNNING).count() > 0 else False
+        is_pending = True if jobs.filter(status=JobStatusChoices.STATUS_PENDING).count() > 0 else False
 
         job_status = None
         if is_pending:

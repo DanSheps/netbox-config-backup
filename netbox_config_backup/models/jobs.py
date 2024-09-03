@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models import ForeignKey
 from django.utils import timezone
 from django_rq import get_queue
-from extras.choices import JobResultStatusChoices
+from core.choices import JobStatusChoices
 from .abstract import BigIDModel
 
 logger = logging.getLogger(f"netbox_config_backup")
@@ -35,8 +35,8 @@ class BackupJob(BigIDModel):
     )
     status = models.CharField(
         max_length=30,
-        choices=JobResultStatusChoices,
-        default=JobResultStatusChoices.STATUS_PENDING
+        choices=JobStatusChoices,
+        default=JobStatusChoices.STATUS_PENDING
     )
     data = models.JSONField(
         null=True,
@@ -79,14 +79,14 @@ class BackupJob(BigIDModel):
         time is also set.
         """
         self.status = status
-        if status in JobResultStatusChoices.TERMINAL_STATE_CHOICES:
+        if status in JobStatusChoices.TERMINAL_STATE_CHOICES:
             self.completed = timezone.now()
 
     def reschedule(self, time):
         """
         Reschedule a job
         """
-        if self.status == JobResultStatusChoices.STATUS_PENDING:
+        if self.status == JobStatusChoices.STATUS_PENDING:
             self.scheduled = time
             job = self.queue.fetch_job(f'{self.job_id}')
             self.queue.schedule(job, time)

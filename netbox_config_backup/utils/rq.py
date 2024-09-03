@@ -6,7 +6,7 @@ from django_rq import get_queue
 from rq.registry import ScheduledJobRegistry
 
 from dcim.choices import DeviceStatusChoices
-from extras.choices import JobResultStatusChoices
+from core.choices import JobStatusChoices
 from netbox_config_backup.choices import StatusChoices
 from netbox_config_backup.models.jobs import BackupJob
 
@@ -108,7 +108,7 @@ def is_running(backup, job_id=None):
     queue = get_queue('netbox_config_backup.jobs')
 
     jobs = backup.jobs.all()
-    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING])
+    queued = jobs.filter(status__in=[JobStatusChoices.STATUS_RUNNING])
 
     if job_id is not None:
         queued.exclude(job_id=job_id)
@@ -129,11 +129,11 @@ def is_running(backup, job_id=None):
                      'is_stopped': job.is_stopped,
             }
             job.cancel()
-            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.status = JobStatusChoices.STATUS_FAILED
             backupjob.save()
             logger.warning(f'{backup}: Job in started queue but not in a registry, cancelling {status}')
         elif job and job.is_canceled:
-            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.status = JobStatusChoices.STATUS_FAILED
             backupjob.save()
     return False
 
@@ -146,7 +146,7 @@ def get_scheduled(backup, job_id=None):
     queued_jobs = queue.get_job_ids()
 
     jobs = backup.jobs.all()
-    queued = jobs.filter(status__in=[JobResultStatusChoices.STATUS_RUNNING, JobResultStatusChoices.STATUS_PENDING])
+    queued = jobs.filter(status__in=[JobStatusChoices.STATUS_RUNNING, JobStatusChoices.STATUS_PENDING])
 
     if job_id is not None:
         queued.exclude(job_id=job_id)
@@ -170,11 +170,11 @@ def get_scheduled(backup, job_id=None):
                      'is_stopped': job.is_stopped,
             }
             job.cancel()
-            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.status = JobStatusChoices.STATUS_FAILED
             backupjob.save()
             logger.warning(f'{backup}: Job in scheduled or started queue but not in a registry, cancelling {status} {scheduled_jobs + started_jobs + queued_jobs}')
         elif job and job.is_canceled:
-            backupjob.status = JobResultStatusChoices.STATUS_FAILED
+            backupjob.status = JobStatusChoices.STATUS_FAILED
             backupjob.save()
     return None
 

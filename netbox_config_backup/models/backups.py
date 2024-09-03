@@ -9,7 +9,7 @@ from django.urls import reverse
 from django_rq import get_queue
 
 from dcim.models import Device
-from extras.choices import JobResultStatusChoices
+from core.choices import JobStatusChoices
 from netbox.models import NetBoxModel
 
 from netbox_config_backup.choices import StatusChoices
@@ -66,11 +66,11 @@ class Backup(NetBoxModel):
 
     def requeue(self):
         self.jobs.filter(
-            ~Q(status=JobResultStatusChoices.STATUS_COMPLETED) &
-            ~Q(status=JobResultStatusChoices.STATUS_FAILED) &
-            ~Q(status=JobResultStatusChoices.STATUS_ERRORED)
+            ~Q(status=JobStatusChoices.STATUS_COMPLETED) &
+            ~Q(status=JobStatusChoices.STATUS_FAILED) &
+            ~Q(status=JobStatusChoices.STATUS_ERRORED)
         ).update(
-            status=JobResultStatusChoices.STATUS_FAILED
+            status=JobStatusChoices.STATUS_FAILED
         )
         remove_queued(self)
         self.enqueue_if_needed()
