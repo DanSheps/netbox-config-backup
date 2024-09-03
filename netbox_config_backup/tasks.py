@@ -7,7 +7,7 @@ from django.utils import timezone
 from django_rq import job
 from netmiko import NetmikoAuthenticationException, NetmikoTimeoutException
 
-from extras.choices import JobResultStatusChoices
+from core.choices import JobStatusChoices
 from netbox import settings
 from netbox.api.exceptions import ServiceUnavailable
 from netbox.config import get_config
@@ -132,24 +132,24 @@ def backup_job(pk):
     delay = timedelta(seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency'))
 
     job_result.started = timezone.now()
-    job_result.status = JobResultStatusChoices.STATUS_RUNNING
+    job_result.status = JobStatusChoices.STATUS_RUNNING
     job_result.save()
     try:
         #logger.debug(f'[{pk}] Starting backup')
         commit = backup_config(backup, pk=pk)
         #logger.debug(f'[{pk}] Finished backup')
 
-        job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
+        job_result.set_status(JobStatusChoices.STATUS_COMPLETED)
         job_result.data = {'commit': f'{commit}' if commit is not None else ''}
-        job_result.set_status(JobResultStatusChoices.STATUS_COMPLETED)
+        job_result.set_status(JobStatusChoices.STATUS_COMPLETED)
         # Enqueue next job if one doesn't exist
         try:
             #logger.debug(f'[{pk}] Starting Enqueue')
             BackupJob.objects.filter(
                 backup=backup
             ).exclude(
-                status__in=JobResultStatusChoices.TERMINAL_STATE_CHOICES
-            ).update(status=JobResultStatusChoices.STATUS_FAILED)
+                status__in=JobStatusChoices.TERMINAL_STATE_CHOICES
+            ).update(status=JobStatusChoices.STATUS_FAILED)
             BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
             #logger.debug(f'[{pk}] Finished Enqueue')
         except Exception as e:
@@ -165,7 +165,7 @@ def backup_job(pk):
         logger.error(f'Uncaught Exception on job: {backup}')
         logger.error(e)
         logger.warning(traceback.format_exc())
-        job_result.set_status(JobResultStatusChoices.STATUS_ERRORED)
+        job_result.set_status(JobStatusChoices.STATUS_ERRORED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 
     #logger.debug(f'[{pk}] Saving result')
