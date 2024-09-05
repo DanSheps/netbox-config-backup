@@ -51,7 +51,7 @@ jobs:
     - name: Install dependencies & set up configuration
       run: |
         python -m pip install --upgrade pip
-        pip install -r netbox\requirements.txt
+        pip install -r netbox\\requirements.txt
         pip install pycodestyle coverage tblib
         pip install -e netbox-config-backup
 
