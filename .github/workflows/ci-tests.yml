@@ -11,7 +11,7 @@ jobs:
       NETBOX_CONFIGURATION: netbox.configuration_testing
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11']
+        python-version: ['3.10', '3.11', '3.12']
     services:
       redis:
         image: redis
@@ -51,7 +51,7 @@ jobs:
     - name: Install dependencies & set up configuration
       run: |
         python -m pip install --upgrade pip
-        pip install -r netbox\\requirements.txt
+        pip install -r netbox/requirements.txt
         pip install pycodestyle coverage tblib
         pip install -e netbox-config-backup
 
