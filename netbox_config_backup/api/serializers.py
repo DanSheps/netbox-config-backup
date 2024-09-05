@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
-from dcim.api.nested_serializers import NestedDeviceSerializer
-from ipam.api.nested_serializers import NestedIPAddressSerializer
+from dcim.api.serializers import DeviceSerializer
+from ipam.api.serializers import IPAddressSerializer
 from netbox.api.serializers import NetBoxModelSerializer
 
 from netbox_config_backup.models import Backup
@@ -14,8 +14,8 @@ __all__ = (
 
 class BackupSerializer(NetBoxModelSerializer):
     url = serializers.HyperlinkedIdentityField(view_name='plugins-api:netbox_config_backup-api:backup-detail')
-    device = NestedDeviceSerializer()
-    ip = NestedIPAddressSerializer()
+    device = DeviceSerializer(nested=True)
+    ip = IPAddressSerializer(nested=True)
 
     class Meta:
         model = Backup
