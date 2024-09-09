@@ -18,7 +18,7 @@ PLUGINS = [
     'netbox_config_backup',
 ]
 
-PLUGINS_MODULES = {
+PLUGINS_CONFIG = {
     'netbox_config_backup': {
         'repository': '/tmp/repository/',
         'committer': 'Test Committer <test@testgit.com>',
