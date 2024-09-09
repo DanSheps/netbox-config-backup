@@ -54,7 +54,7 @@ jobs:
         pip install -r netbox/requirements.txt
         pip install pycodestyle coverage tblib
         pip install -e netbox-config-backup
-        cp -f netbox-config-backup/.github/configuration.testing.py netbox/netbox/netbox/
+        cp -f netbox-config-backup/.github/configuration.testing.py netbox/netbox/netbox/configuration_testing.py
         ls -la netbox/netbox/netbox/
 
     - name: Run tests
