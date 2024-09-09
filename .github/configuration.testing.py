@@ -15,8 +15,18 @@ DATABASE = {
 }
 
 PLUGINS = [
-    'netbox_secretstore',
+    'netbox_config_backup',
 ]
+
+PLUGINS_MODULES = {
+    'netbox_config_backup': {
+        'repository': 'c:\\Development\\backuprepotest\\',
+        'repository': '/tmp/repository/',
+        'committer': 'Test Committer <test@testgit.com>',
+        'author': 'Test Committer <test@testgit.com>',
+        'frequency': 3600,
+    }
+}
 
 REDIS = {
     'tasks': {
