@@ -24,11 +24,23 @@ class Command(BaseCommand):
             time.sleep(10)
             self.stdout.write(f"Child {i} sleep complete")
 
-        processes = []
-        for i in range(1, 2):
+        processes = {}
+        for i in range(1, 3):
             p = Process(target=test, args=(i,))
             p.start()
             p.join(1)
             self.stdout.write(f"Child {i} running")
-            processes.append(p)
+            processes.update({p.pid: p})
+
+        while True:
+            if len(processes) == 0:
+                break
+            for pid in list(processes.keys()):
+                process = processes.get(pid, None)
+                if not process.is_alive():
+                    del processes[pid]
+            time.sleep(1)
+
+
+
 

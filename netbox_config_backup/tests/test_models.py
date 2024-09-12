@@ -7,24 +7,33 @@ from netbox_config_backup.models import *
 
 class TestBackup(TestCase):
 
+
     @classmethod
     def setUpTestData(cls):
-
-        site = Site.objects.create(name='Site 1')
-        manufacturer = Manufacturer.objects.create(name='Manufacturer 1')
-        device_type = DeviceType.objects.create(model='Device Type 1', manufacturer=manufacturer)
-        role = DeviceRole.objects.create(name='Switch')
-        device = Device.objects.create(
-            name='Device 1',
-            site=site,
-            device_type=device_type,
-            role=role,
-            status='active'
-        )
-        interface = Interface.objects.create(name='Interface 1', device=device, type='1000baset')
-        address = IPAddress.objects.create(assigned_object=interface, address='10.0.0.1/32')
-        device.primary_ip4 = address
-        device.save()
+        Site.objects.create(name='Site 1', slug='site-1')
+        manufacturer = Manufacturer.objects.create(name='Manufacturer 1', slug='manufacturer-1')
+        DeviceType.objects.create(model='Generic Type', slug='generic-type', manufacturer=manufacturer)
+        DeviceRole.objects.create(name='Generic Role', slug='generic-role')
 
     def test_create_backup(self):
-        pass
+        configs = {
+            'running': 'Test Backup',
+            'startup': 'Test Backup'
+        }
+
+        site = Site.objects.first()
+        role = DeviceRole.objects.first()
+        device_type = DeviceType.objects.first()
+
+        device = Device.objects.create(
+            name='Test Device',
+            device_type=device_type,
+            role=role,
+            site=site
+        )
+        backup = Backup.objects.create(name='Backup 1', device=device)
+        backup.set_config(configs)
+        retrieved = backup.get_config()
+
+        self.assertEqual(configs['running'], retrieved['running'])
+        self.assertEqual(configs['startup'], retrieved['startup'])
