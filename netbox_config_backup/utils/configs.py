@@ -58,18 +58,14 @@ def check_config_save_status(d):
 
                 dates[file] = date
                 datetimes[file] = datetime.strptime(date, '%Y-%b-%d %H:%M:%S')
-
-                # logger.debug(f'\t{file}: {result} ({date}) ({datetimes[file]})')
             else:
                 logger.debug(f'\tNo {file} time found, platform: {d.platform}')
-                # logger.debug(f'\t{file}: {result}')
 
         if datetimes['running'] is None and datetimes['startup'] is not None:
             logger.debug(f'\tValid backup as booted from startup')
             return True
         elif datetimes['startup'] is None:
             logger.debug(f'\tNo startup time')
-            # logger.info(f'{datetimes["running"]} ({dates["running"]}): {datetimes["startup"]} ({dates["startup"]})')
             return
         elif datetimes['running'] <= datetimes['startup']:
             logger.debug(f'\tRunning config less then startup')

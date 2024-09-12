@@ -15,6 +15,7 @@ DATABASE = {
 }
 
 PLUGINS = [
+    'netbox_napalm_plugin',
     'netbox_config_backup',
 ]
 
