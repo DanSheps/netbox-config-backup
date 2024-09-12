@@ -19,7 +19,7 @@ class BackupSerializer(NetBoxModelSerializer):
     class Meta:
         model = Backup
         fields = [
-            'id', 'url', 'display_url', 'display', 'name', 'device', 'ip',
+            'id', 'url', 'display', 'name', 'device', 'ip',
             'uuid', 'status', 'config_status',
         ]
         brief_fields = ('display', 'id', 'name', 'url')
