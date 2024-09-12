@@ -27,6 +27,7 @@ class NetboxConfigBackup(PluginConfig):
     queues = [
         'jobs'
     ]
+    graphql_schema = 'graphql.schema.schema'
 
 
 config = NetboxConfigBackup

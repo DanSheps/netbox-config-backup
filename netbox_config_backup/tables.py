@@ -47,6 +47,9 @@ class BackupTable(BaseTable):
     backup_count = tables.Column(
         accessor='changes'
     )
+    config_status = tables.BooleanColumn(
+        verbose_name='Config Saved'
+    )
 
     class Meta(BaseTable.Meta):
         model = Backup

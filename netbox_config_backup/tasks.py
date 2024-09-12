@@ -1,30 +1,16 @@
-import logging
-import sys
 import traceback
 from datetime import timedelta
 
 from django.utils import timezone
-from django_rq import job
 from netmiko import NetmikoAuthenticationException, NetmikoTimeoutException
 
 from core.choices import JobStatusChoices
 from netbox import settings
 from netbox.api.exceptions import ServiceUnavailable
-from netbox.config import get_config
-from netbox_config_backup.models import Backup, BackupJob, BackupCommit
+from netbox_config_backup.models import BackupJob
+from netbox_config_backup.utils.configs import check_config_save_status
+from netbox_config_backup.utils.logger import get_logger
 from netbox_config_backup.utils.rq import can_backup
-
-
-def get_logger():
-    # Setup logging to Stdout
-    formatter = logging.Formatter(f'[%(asctime)s][%(levelname)s] - %(message)s')
-    stdouthandler = logging.StreamHandler(sys.stdout)
-    stdouthandler.setLevel(logging.DEBUG)
-    stdouthandler.setFormatter(formatter)
-    logger = logging.getLogger(f"netbox_config_backup")
-    logger.addHandler(stdouthandler)
-
-    return logger
 
 
 def napalm_init(device, ip=None, extra_args={}):
@@ -99,7 +85,25 @@ def backup_config(backup, pk=None):
         logger.info(f'{backup}: Backup started')
         #logger.debug(f'[{pk}] Connecting')
         d = napalm_init(backup.device, ip)
-        #logger.debug(f'[{pk}] Finished Connection')
+        #logger.debug(f'[{pk}
+
+        try:
+            status = check_config_save_status(d)
+            if status is not None:
+                if status and not backup.config_status:
+                    backup.config_status = status
+                    backup.save()
+                elif not status and backup.config_status:
+                    backup.config_status = status
+                    backup.save()
+                elif not status and backup.config_status is None:
+                    backup.config_status = status
+                    backup.save()
+                elif status and backup.config_status is None:
+                    backup.config_status = status
+                    backup.save()
+        except Exception as e:
+            logger.error(f'{backup}: had error setting backup status: {e}')
 
         #logger.debug(f'[{pk}] Getting config')
         configs = d.get_config()
