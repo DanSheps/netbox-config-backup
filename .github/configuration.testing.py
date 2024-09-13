@@ -26,6 +26,10 @@ PLUGINS_CONFIG = {
         'author': 'Test Committer <test@testgit.com>',
         'frequency': 3600,
     },
+    'netbox_napalm_plugin': {
+        'NAPALM_USERNAME': 'xxx',
+        'NAPALM_PASSWORD': 'yyy',
+    }
 }
 
 REDIS = {
