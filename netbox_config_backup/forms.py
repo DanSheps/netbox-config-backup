@@ -6,16 +6,20 @@ from django.utils.translation import gettext as _
 from dcim.choices import DeviceStatusChoices
 from dcim.models import Device
 from ipam.models import IPAddress
+from netbox.forms import NetBoxModelForm, NetBoxModelBulkEditForm
 from netbox_config_backup.models import Backup
-from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField
+from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField, CommentField
 
 __all__ = (
     'BackupForm',
     'BackupFilterSetForm',
+    'BackupBulkEditForm',
 )
 
+from utilities.forms.rendering import FieldSet
 
-class BackupForm(forms.ModelForm):
+
+class BackupForm(NetBoxModelForm):
     device = DynamicModelChoiceField(
         label='Device',
         required=False,
@@ -36,9 +40,11 @@ class BackupForm(forms.ModelForm):
             'assigned_to_interface': True
         },
     )
+    comments = CommentField()
+
     class Meta:
         model = Backup
-        fields = ('name', 'device', 'ip', 'status')
+        fields = ('name', 'device', 'ip', 'status', 'description', 'comments', 'config_status')
 
     def clean(self):
         super().clean()
@@ -71,7 +77,7 @@ class BackupFilterSetForm(forms.Form):
             'status': [DeviceStatusChoices.STATUS_ACTIVE],
             'platform__napalm__ne': None,
             'has_primary_ip': True,
-        }
+        },
     )
     ip = forms.CharField(
         required=False,
@@ -84,3 +90,15 @@ class BackupFilterSetForm(forms.Form):
     )
 
 
+class BackupBulkEditForm(NetBoxModelBulkEditForm):
+
+    description = forms.CharField(
+        label=_('Description'),
+        max_length=200,
+        required=False
+    )
+    comments = CommentField()
+
+    model = Backup
+    fieldsets = ()
+    nullable_fields = ()

@@ -10,7 +10,7 @@ from django_rq import get_queue
 
 from dcim.models import Device
 from core.choices import JobStatusChoices
-from netbox.models import NetBoxModel
+from netbox.models import PrimaryModel
 
 from netbox_config_backup.choices import StatusChoices
 from netbox_config_backup.helpers import get_repository_dir
@@ -22,7 +22,7 @@ from ..utils import Differ
 logger = logging.getLogger(f"netbox_config_backup")
 
 
-class Backup(NetBoxModel):
+class Backup(PrimaryModel):
     name = models.CharField(max_length=255, unique=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(
@@ -39,6 +39,10 @@ class Backup(NetBoxModel):
     ip = models.ForeignKey(
         to='ipam.IPAddress',
         on_delete=models.SET_NULL,
+        blank=True,
+        null=True
+    )
+    config_status = models.BooleanField(
         blank=True,
         null=True
     )
@@ -95,6 +99,7 @@ class Backup(NetBoxModel):
             stored = stored_configs.get(file) if stored_configs.get(file) is not None else ''
             #logger.debug(f'[{pk}] Getting new config')
             current = configs.get(file) if configs.get(file) is not None else ''
+
             #logger.debug(f'[{pk}] Starting diff for {file}')
             if Differ(stored, current).is_diff():
                 changes = True

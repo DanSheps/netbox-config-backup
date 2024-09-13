@@ -15,8 +15,22 @@ DATABASE = {
 }
 
 PLUGINS = [
-    'netbox_secretstore',
+    'netbox_napalm_plugin',
+    'netbox_config_backup',
 ]
+
+PLUGINS_CONFIG = {
+    'netbox_config_backup': {
+        'repository': '/tmp/repository/',
+        'committer': 'Test Committer <test@testgit.com>',
+        'author': 'Test Committer <test@testgit.com>',
+        'frequency': 3600,
+    },
+    'netbox_napalm_plugin': {
+        'NAPALM_USERNAME': 'xxx',
+        'NAPALM_PASSWORD': 'yyy',
+    }
+}
 
 REDIS = {
     'tasks': {

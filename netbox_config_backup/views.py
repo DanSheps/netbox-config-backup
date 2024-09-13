@@ -7,10 +7,11 @@ from django.urls import reverse, NoReverseMatch
 from django.views import View
 
 from core.choices import JobStatusChoices
-from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView
+from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView, \
+    BulkEditView, BulkDeleteView
 from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet
 
-from netbox_config_backup.forms import BackupForm, BackupFilterSetForm
+from netbox_config_backup.forms import BackupForm, BackupFilterSetForm, BackupBulkEditForm
 from netbox_config_backup.git import GitBackup
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit, BackupObject
 from netbox_config_backup.tables import BackupTable, BackupsTable
@@ -139,6 +140,21 @@ class BackupDeleteView(ObjectDeleteView):
 
         # If all else fails, return home. Ideally this should never happen.
         return reverse('home')
+
+
+@register_model_view(Backup, 'bulk_edit')
+class BackupBulkEditView(BulkEditView):
+    queryset = Backup.objects.all()
+    form = BackupBulkEditForm
+    filterset = BackupFilterSet
+    table = BackupTable
+
+
+@register_model_view(Backup, 'bulk_delete')
+class BackupBulkDeleteView(BulkDeleteView):
+    queryset = Backup.objects.all()
+    filterset = BackupFilterSet
+    table = BackupTable
 
 
 @register_model_view(Backup, 'config')
