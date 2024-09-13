@@ -15,10 +15,21 @@ from netbox_config_backup.utils.rq import can_backup
 
 def napalm_init(device, ip=None, extra_args={}):
     from netbox import settings
-    username = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_USERNAME', None)
-    password = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_PASSWORD', None)
-    timeout = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_TIMEOUT', None)
-    optional_args = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get('NAPALM_ARGS', []).copy()
+
+    username = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get(
+        'NAPALM_USERNAME', None
+    )
+    password = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get(
+        'NAPALM_PASSWORD', None
+    )
+    timeout = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get(
+        'NAPALM_TIMEOUT', None
+    )
+    optional_args = (
+        settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {})
+        .get('NAPALM_ARGS', [])
+        .copy()
+    )
 
     if device and device.platform and device.platform.napalm.napalm_args is not None:
         optional_args.update(device.platform.napalm.napalm_args)
@@ -31,9 +42,7 @@ def napalm_init(device, ip=None, extra_args={}):
     elif device.primary_ip and device.primary_ip is not None:
         host = str(device.primary_ip.address.ip)
     else:
-        raise ServiceUnavailable(
-            "This device does not have a primary IP address"
-        )
+        raise ServiceUnavailable("This device does not have a primary IP address")
 
     # Check that NAPALM is installed
     try:
@@ -41,16 +50,20 @@ def napalm_init(device, ip=None, extra_args={}):
         from napalm.base.exceptions import ModuleImportError
     except ModuleNotFoundError as e:
         if getattr(e, 'name') == 'napalm':
-            raise ServiceUnavailable("NAPALM is not installed. Please see the documentation for instructions.")
+            raise ServiceUnavailable(
+                "NAPALM is not installed. Please see the documentation for instructions."
+            )
         raise e
 
     # Validate the configured driver
     try:
         driver = napalm.get_network_driver(device.platform.napalm.napalm_driver)
     except ModuleImportError:
-        raise ServiceUnavailable("NAPALM driver for platform {} not found: {}.".format(
-            device.platform, device.platform.napalm.napalm_driver
-        ))
+        raise ServiceUnavailable(
+            "NAPALM driver for platform {} not found: {}.".format(
+                device.platform, device.platform.napalm.napalm_driver
+            )
+        )
 
     # Connect to the device
     d = driver(
@@ -58,7 +71,7 @@ def napalm_init(device, ip=None, extra_args={}):
         username=username,
         password=password,
         timeout=timeout,
-        optional_args=optional_args
+        optional_args=optional_args,
     )
     try:
         d.open()
@@ -67,7 +80,9 @@ def napalm_init(device, ip=None, extra_args={}):
             logger.info('Authentication error')
         elif isinstance(e, NetmikoTimeoutException):
             logger.info('Connection error')
-        raise ServiceUnavailable("Error connecting to the device at {}: {}".format(host, e))
+        raise ServiceUnavailable(
+            "Error connecting to the device at {}: {}".format(host, e)
+        )
 
     return d
 
@@ -83,9 +98,9 @@ def backup_config(backup, pk=None):
 
     if backup.device is not None and ip is not None:
         logger.info(f'{backup}: Backup started')
-        #logger.debug(f'[{pk}] Connecting')
+        # logger.debug(f'[{pk}] Connecting')
         d = napalm_init(backup.device, ip)
-        #logger.debug(f'[{pk}
+        # logger.debug(f'[{pk}
 
         try:
             status = check_config_save_status(d)
@@ -105,13 +120,13 @@ def backup_config(backup, pk=None):
         except Exception as e:
             logger.error(f'{backup}: had error setting backup status: {e}')
 
-        #logger.debug(f'[{pk}] Getting config')
+        # logger.debug(f'[{pk}] Getting config')
         configs = d.get_config()
-        #logger.debug(f'[{pk}] Finished config get')
+        # logger.debug(f'[{pk}] Finished config get')
 
-        #logger.debug(f'[{pk}] Setting config')
+        # logger.debug(f'[{pk}] Setting config')
         commit = backup.set_config(configs, pk=pk)
-        #logger.debug(f'[{pk}] Finished config set')
+        # logger.debug(f'[{pk}] Finished config set')
 
         d.close()
         logger.info(f'{backup}: Backup complete')
@@ -123,6 +138,7 @@ def backup_config(backup, pk=None):
 
 def backup_job(pk):
     import netmiko
+
     try:
         job_result = BackupJob.objects.get(pk=pk)
     except BackupJob.DoesNotExist:
@@ -133,29 +149,29 @@ def backup_job(pk):
     if not can_backup(backup):
         logger.warning(f'Cannot backup due to additional factors')
         return 1
-    delay = timedelta(seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency'))
+    delay = timedelta(
+        seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency')
+    )
 
     job_result.started = timezone.now()
     job_result.status = JobStatusChoices.STATUS_RUNNING
     job_result.save()
     try:
-        #logger.debug(f'[{pk}] Starting backup')
+        # logger.debug(f'[{pk}] Starting backup')
         commit = backup_config(backup, pk=pk)
-        #logger.debug(f'[{pk}] Finished backup')
+        # logger.debug(f'[{pk}] Finished backup')
 
         job_result.set_status(JobStatusChoices.STATUS_COMPLETED)
         job_result.data = {'commit': f'{commit}' if commit is not None else ''}
         job_result.set_status(JobStatusChoices.STATUS_COMPLETED)
         # Enqueue next job if one doesn't exist
         try:
-            #logger.debug(f'[{pk}] Starting Enqueue')
-            BackupJob.objects.filter(
-                backup=backup
-            ).exclude(
+            # logger.debug(f'[{pk}] Starting Enqueue')
+            BackupJob.objects.filter(backup=backup).exclude(
                 status__in=JobStatusChoices.TERMINAL_STATE_CHOICES
             ).update(status=JobStatusChoices.STATUS_FAILED)
             BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
-            #logger.debug(f'[{pk}] Finished Enqueue')
+            # logger.debug(f'[{pk}] Finished Enqueue')
         except Exception as e:
             logger.error(f'Job Enqueue after completion failed for job: {backup}')
             logger.error(f'\tException: {e}')
@@ -172,7 +188,7 @@ def backup_job(pk):
         job_result.set_status(JobStatusChoices.STATUS_ERRORED)
         BackupJob.enqueue_if_needed(backup, delay=delay, job_id=job_result.job_id)
 
-    #logger.debug(f'[{pk}] Saving result')
+    # logger.debug(f'[{pk}] Saving result')
     job_result.save()
 
 
