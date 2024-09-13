@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools"]
+requires = [
+    "setuptools",
+    "wheel"
+]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -35,7 +38,7 @@ Source = "https://github.com/dansheps/netbox-config-backup"
 Tracker = "https://github.com/dansheps/netbox-config-backup/issues"
 
 [tool.setuptools.packages.find]
-include=["netbox_config_backup"]
+include=["netbox_config_backup*"]
 exclude=["netbox_config_backup.tests"]
 
 [tool.black]
