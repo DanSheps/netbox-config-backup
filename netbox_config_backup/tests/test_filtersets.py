@@ -25,7 +25,7 @@ class BackupTestCase(TestCase):
         )
 
         ip = IPAddress.objects.create(
-            address='10.10.10.10/32'
+            address='10.10.10.10/24'
         )
 
         devices = (
@@ -54,5 +54,5 @@ class BackupTestCase(TestCase):
         self.assertEqual(self.filterset(params, self.queryset).qs.count(), 2)
 
     def test_ip(self):
-        params = {'ip_address': ['10.10.10.10']}
+        params = {'ip': '10.10.10.10'}
         self.assertEqual(self.filterset(params, self.queryset).qs.count(), 1)

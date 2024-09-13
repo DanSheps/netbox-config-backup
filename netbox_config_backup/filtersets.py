@@ -62,8 +62,14 @@ class BackupFilterSet(BaseFilterSet):
 
     def filter_address(self, queryset, name, value):
         try:
-            return queryset.filter(ip__address__net_host_contained=value)
-        except ValidationError:
+            if type(value) is list:
+                query = Q()
+                for val in value:
+                    query |= Q(ip__address__net_host_contained=val)
+                return queryset.filter(query)
+            else:
+                return queryset.filter(ip__address__net_host_contained=value)
+        except ValidationError as e:
             return queryset.none()
 
 
@@ -83,10 +89,8 @@ class BackupsFilterSet(BaseFilterSet):
         fields = ['id', 'file']
 
     def search(self, queryset, name, value):
-        print('Search')
         if not value.strip():
             return queryset
-        print(value)
         qs_filter = (
             Q(file__type=value) |
             Q(file__type__startswith=value)
