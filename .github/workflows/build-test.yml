@@ -25,22 +25,3 @@ jobs:
       with:
         name: python-package-distributions
         path: dist/
-  test-files:
-    name: Verify contents of file
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    environment:
-      name: test-files
-    steps:
-      - name: Download all the dists
-        uses: actions/download-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
-      - name: Extract Files
-        run: |
-          mkdir testfolder
-          cd testfolder
-          tar -xzf ../dist/*.tar.gz
-          ls -la netbox_config_backup*/netbox_config_backup/
