@@ -44,4 +44,4 @@ jobs:
           cd testfolder
           tar -xzf ../dist/*.tar.gz
           ls -la
-          ls -la netbox_config_backup/
+          ls -la netbox_config_backup*/
