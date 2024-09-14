@@ -40,7 +40,7 @@ jobs:
           path: dist/
       - name: Extract Files
         run: |
-          mkdir testfoldler
+          mkdir testfolder
           cd testfolder
           tar -xzf ../dist/*.tar.gz
           ls -la
