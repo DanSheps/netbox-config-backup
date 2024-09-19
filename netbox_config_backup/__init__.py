@@ -8,7 +8,7 @@ metadata = metadata('netbox_config_backup')
 class NetboxConfigBackup(PluginConfig):
     name = metadata.get('Name').replace('-', '_')
     verbose_name = metadata.get('Name').replace('-', ' ').title()
-    description = metadata.get('Description')
+    description = metadata.get('Summary')
     version = metadata.get('Version')
     author = metadata.get('Author')
     author_email = metadata.get('Author-email')
