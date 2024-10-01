@@ -67,7 +67,6 @@ class BackupView(ObjectView):
 
         status = {
             'status': job_status,
-            'scheduled': BackupJob.is_queued(instance),
             'next_attempt': instance.next_attempt,
             'last_job': instance.jobs.filter(completed__isnull=False).last(),
             'last_success': instance.last_backup,
