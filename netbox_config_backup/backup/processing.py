@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import traceback
 
 from django.db.models import Q
@@ -7,7 +8,7 @@ from django.utils import timezone
 
 from core.choices import JobStatusChoices
 from netbox.api.exceptions import ServiceUnavailable
-from netbox_config_backup.models import BackupJob
+from netbox_config_backup.models import BackupJob, Backup
 from netbox_config_backup.utils.configs import check_config_save_status
 from netbox_config_backup.utils.napalm import napalm_init
 from netbox_config_backup.utils.rq import can_backup
@@ -16,16 +17,26 @@ logger = logging.getLogger(f"netbox_config_backup")
 
 
 def remove_stale_backupjobs(job: BackupJob):
-    BackupJob.objects.filter(backup=job.backup).exclude(status=JobStatusChoices.STATUS_COMPLETED).exclude(
-        pk=job.pk).delete()
+    pass
 
-def run_backup(backup, job):
-    pid = os.getpid()
-
-    job.status = JobStatusChoices.STATUS_PENDING
-    job.pid = pid
-    job.save()
+def run_backup(job_id, backup_id):
+    logger.info(f'Starting backup for job {job_id}')
     try:
+        job = BackupJob.objects.get(pk=job_id)
+    except Exception as e:
+        logger.error(f'Unable to load job {job_id}: {e}')
+        logger.debug(f'\t{traceback.format_exc()}')
+        raise e
+
+    try:
+        backup = Backup.objects.get(pk=backup_id)
+        backup.refresh_from_db()
+        pid = os.getpid()
+
+        job.status = JobStatusChoices.STATUS_PENDING
+        job.pid = pid
+        job.save()
+
         if not can_backup(backup):
             job.status = JobStatusChoices.STATUS_FAILED
             if not job.data:
@@ -37,7 +48,11 @@ def run_backup(backup, job):
             return
 
         commit = None
-        ip = backup.ip if backup.ip is not None else backup.device.primary_ip
+        try:
+            ip = backup.ip if backup.ip is not None else backup.device.primary_ip
+        except Exception as e:
+            logger.debug(f'{e}: {backup}')
+            raise e
 
         if ip:
             try:
@@ -45,6 +60,7 @@ def run_backup(backup, job):
             except (TimeoutError, ServiceUnavailable):
                 job.status = JobStatusChoices.STATUS_FAILED
                 job.data = {'error': f'Timeout Connecting to {backup.device} with ip {ip}'}
+                logger.debug = f'Timeout Connecting to {backup.device} with ip {ip}'
                 job.save()
                 return
 
@@ -87,11 +103,12 @@ def run_backup(backup, job):
             job.save()
             logger.debug(f'{backup}: No IP set')
     except Exception as e:
-        job.status = JobStatusChoices.STATUS_ERRORED
-        if not job.data:
-            job.data = {}
-        job.data.update({'error': f'{e}'})
-        job.full_clean()
-        job.save()
-        logger.error(f'Exception in {backup}: {e}')
-        logger.info(f'{backup}: {traceback.format_exc()}')
+        logger.error(f'Exception in {job_id}: {e}')
+        logger.info(f'\t{traceback.format_exc()}')
+        if job:
+            job.status = JobStatusChoices.STATUS_ERRORED
+            if not job.data:
+                job.data = {}
+            job.data.update({'error': f'{e}'})
+            job.full_clean()
+            job.save()

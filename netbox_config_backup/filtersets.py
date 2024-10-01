@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.utils.translation import gettext as _
 from netaddr import AddrFormatError
 
+from core.choices import JobStatusChoices
 from ipam.models import IPAddress
 from netbox.filtersets import NetBoxModelFilterSet, BaseFilterSet
 from dcim.models import Device
@@ -21,7 +22,7 @@ class BackupJobFilterSet(BaseFilterSet):
 
     class Meta:
         model = models.BackupJob
-        fields = ['id', ]
+        fields = ['id', 'status']
 
 
 class BackupFilterSet(BaseFilterSet):

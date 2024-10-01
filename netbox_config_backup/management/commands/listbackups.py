@@ -1,13 +1,4 @@
-import uuid
-
 from django.core.management.base import BaseCommand
-from django.db import transaction
-from django.utils import timezone
-
-from netbox_config_backup.models import BackupJob
-from netbox_config_backup.tasks import backup_job
-from netbox_config_backup.utils import remove_queued
-from netbox_config_backup.utils.rq import can_backup
 
 
 class Command(BaseCommand):

@@ -6,7 +6,7 @@ logger = get_logger()
 
 
 def check_config_save_status(d):
-    logger.info(f'Switch: {d.hostname}')
+    logger.debug(f'Switch: {d.hostname}')
     platform = {
         'ios': {
             'running': {

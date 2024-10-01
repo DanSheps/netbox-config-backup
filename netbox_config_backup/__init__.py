@@ -32,7 +32,7 @@ class NetboxConfigBackup(PluginConfig):
     def ready(self, *args, **kwargs):
         super().ready()
         import sys
-        if 'manage.py' not in sys.argv[0]:
+        if 'rqworker' in sys.argv[1]:
             from netbox import settings
             from netbox_config_backup.jobs.backup import BackupRunner
             from netbox_config_backup.models import BackupJob, Backup
