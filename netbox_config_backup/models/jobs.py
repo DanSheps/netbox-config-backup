@@ -15,6 +15,14 @@ logger = logging.getLogger(f"netbox_config_backup")
 
 
 class BackupJob(BigIDModel):
+    runner = models.ForeignKey(
+        verbose_name=_('Job Run'),
+        to='core.Job',
+        on_delete=models.SET_NULL,
+        related_name='backup_job',
+        null=True,
+        blank=True
+    )
     backup = ForeignKey(
         to='Backup',
         on_delete=models.CASCADE,

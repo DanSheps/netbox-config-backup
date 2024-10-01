@@ -20,34 +20,37 @@ class BackupRunner(JobRunner):
     class Meta:
         name = 'The Backup Job Runner'
 
+    def clean_stale_jobs(self, processes, old):
+        for job in old.all():
+            if job.pid:
+                pass
+            job.status = JobStatusChoices.STATUS_ERRORED
+            if not job.data:
+                job.data = {}
+            job.data.update({'error': 'Job hung'})
+            job.delete()
+            logger.error(f'Job {job.backup} appears stuck, deleting')
+
     def run(self, *args, **kwargs):
-        processes = {}
-        for backup in Backup.objects.filter(status=StatusChoices.STATUS_ACTIVE, device__isnull=False):
-            running = BackupJob.objects.filter(
-                ~Q(
-                    status__in=[
-                        JobStatusChoices.STATUS_COMPLETED,
-                        JobStatusChoices.STATUS_ERRORED,
-                        JobStatusChoices.STATUS_FAILED
-                    ]
-                )
+        running = BackupJob.objects.filter(
+            ~Q(
+                status__in=[
+                    JobStatusChoices.STATUS_COMPLETED,
+                    JobStatusChoices.STATUS_ERRORED,
+                    JobStatusChoices.STATUS_FAILED
+                ]
             )
-            while running.count() >= 5:
+        )
+        processes = {}
+
+        for backup in Backup.objects.filter(status=StatusChoices.STATUS_ACTIVE, device__isnull=False):
+            while running.count() >= 20:
                 logger.debug(f'Number of running jobs >= 5, sleeping for 60 seconds')
                 old = running.filter(scheduled__lt=timezone.now() - timedelta(minutes=30))
-                for job in old.all():
-                    if job.pid and processes.get(job.pid):
-                        processes.get(job.pid).terminate()
-                    job.status = JobStatusChoices.STATUS_ERRORED
-                    if not job.data:
-                        job.data = {}
-                    job.data.update({'error': 'Job hung'})
-                    job.delete()
-                    logger.error(f'Job {job.backup} appears stuck, deleting')
-                time.sleep(60)
-
+                self.clean_stale_jobs(processes, old)
             logger.info(f'Queuing device {backup.device} for backup')
             job = BackupJob(
+                runner=self.job,
                 backup=backup,
                 status=JobStatusChoices.STATUS_SCHEDULED,
                 scheduled=timezone.now(),
@@ -61,7 +64,7 @@ class BackupRunner(JobRunner):
                 logger.info(f'Forking process {process.pid} for {backup.device} backup')
                 processes.update({backup.pk: process})
                 process.start()
-                time.sleep(10)
+                time.sleep(5)
             else:
                 job.status=JobStatusChoices.STATUS_FAILED
                 if not job.data:
