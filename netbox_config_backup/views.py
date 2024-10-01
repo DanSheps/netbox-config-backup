@@ -9,16 +9,25 @@ from django.views import View
 from core.choices import JobStatusChoices
 from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView, \
     BulkEditView, BulkDeleteView
-from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet
+from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet, BackupJobFilterSet
 
-from netbox_config_backup.forms import BackupForm, BackupFilterSetForm, BackupBulkEditForm
+from netbox_config_backup.forms import BackupForm, BackupFilterSetForm, BackupBulkEditForm, BackupJobFilterSetForm
 from netbox_config_backup.git import GitBackup
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit, BackupObject
-from netbox_config_backup.tables import BackupTable, BackupsTable
+from netbox_config_backup.tables import BackupTable, BackupsTable, BackupJobTable
 from netbox_config_backup.utils import get_backup_tables, Differ
 from utilities.views import register_model_view, ViewTab
 
 logger = logging.getLogger(f"netbox_config_backup")
+
+
+class BackupJobListView(ObjectListView):
+    queryset = BackupJob.objects.all()
+
+    filterset = BackupJobFilterSet
+    filterset_form = BackupJobFilterSetForm
+    table = BackupJobTable
+    action_buttons = ()
 
 
 class BackupListView(ObjectListView):

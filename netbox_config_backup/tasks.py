@@ -2,89 +2,16 @@ import traceback
 from datetime import timedelta
 
 from django.utils import timezone
-from netmiko import NetmikoAuthenticationException, NetmikoTimeoutException
 
 from core.choices import JobStatusChoices
 from netbox import settings
 from netbox.api.exceptions import ServiceUnavailable
+from netbox_config_backup.backup.processing import logger
 from netbox_config_backup.models import BackupJob
 from netbox_config_backup.utils.configs import check_config_save_status
 from netbox_config_backup.utils.logger import get_logger
+from netbox_config_backup.utils.napalm import napalm_init
 from netbox_config_backup.utils.rq import can_backup
-
-
-def napalm_init(device, ip=None, extra_args={}):
-    from netbox import settings
-
-    username = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get(
-        'NAPALM_USERNAME', None
-    )
-    password = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get(
-        'NAPALM_PASSWORD', None
-    )
-    timeout = settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {}).get(
-        'NAPALM_TIMEOUT', None
-    )
-    optional_args = (
-        settings.PLUGINS_CONFIG.get('netbox_napalm_plugin', {})
-        .get('NAPALM_ARGS', [])
-        .copy()
-    )
-
-    if device and device.platform and device.platform.napalm.napalm_args is not None:
-        optional_args.update(device.platform.napalm.napalm_args)
-    if extra_args != {}:
-        optional_args.update(extra_args)
-
-    # Check for primary IP address from NetBox object
-    if ip is not None:
-        host = str(ip.address.ip)
-    elif device.primary_ip and device.primary_ip is not None:
-        host = str(device.primary_ip.address.ip)
-    else:
-        raise ServiceUnavailable("This device does not have a primary IP address")
-
-    # Check that NAPALM is installed
-    try:
-        import napalm
-        from napalm.base.exceptions import ModuleImportError
-    except ModuleNotFoundError as e:
-        if getattr(e, 'name') == 'napalm':
-            raise ServiceUnavailable(
-                "NAPALM is not installed. Please see the documentation for instructions."
-            )
-        raise e
-
-    # Validate the configured driver
-    try:
-        driver = napalm.get_network_driver(device.platform.napalm.napalm_driver)
-    except ModuleImportError:
-        raise ServiceUnavailable(
-            "NAPALM driver for platform {} not found: {}.".format(
-                device.platform, device.platform.napalm.napalm_driver
-            )
-        )
-
-    # Connect to the device
-    d = driver(
-        hostname=host,
-        username=username,
-        password=password,
-        timeout=timeout,
-        optional_args=optional_args,
-    )
-    try:
-        d.open()
-    except Exception as e:
-        if isinstance(e, NetmikoAuthenticationException):
-            logger.info('Authentication error')
-        elif isinstance(e, NetmikoTimeoutException):
-            logger.info('Connection error')
-        raise ServiceUnavailable(
-            "Error connecting to the device at {}: {}".format(host, e)
-        )
-
-    return d
 
 
 def backup_config(backup, pk=None):

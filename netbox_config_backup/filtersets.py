@@ -13,6 +13,17 @@ from netbox_config_backup.choices import FileTypeChoices
 from utilities.filters import MultiValueCharFilter
 
 
+class BackupJobFilterSet(BaseFilterSet):
+    q = django_filters.CharFilter(
+        method='search',
+        label=_('Search'),
+    )
+
+    class Meta:
+        model = models.BackupJob
+        fields = ['id', ]
+
+
 class BackupFilterSet(BaseFilterSet):
     q = django_filters.CharFilter(
         method='search',

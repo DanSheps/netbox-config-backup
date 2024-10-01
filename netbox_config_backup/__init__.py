@@ -29,5 +29,14 @@ class NetboxConfigBackup(PluginConfig):
     ]
     graphql_schema = 'graphql.schema.schema'
 
+    def ready(self):
+        super().ready()
+        from netbox import settings
+        from netbox_config_backup.jobs.backup import BackupRunner
+        from netbox_config_backup.models import BackupJob, Backup
+
+        frequency = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency') / 60
+        BackupRunner.enqueue_once(interval=frequency)
+
 
 config = NetboxConfigBackup

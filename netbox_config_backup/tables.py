@@ -27,6 +27,32 @@ class ActionButtonsColumn(tables.TemplateColumn):
         return ''
 
 
+class BackupJobTable(BaseTable):
+    pk = columns.ToggleColumn(
+
+    )
+    backup = tables.Column(
+        linkify=True,
+        verbose_name='Backup'
+    )
+    created = tables.DateTimeColumn()
+    scheduled = tables.DateTimeColumn()
+    started = tables.DateTimeColumn()
+    completed = tables.DateTimeColumn()
+
+    class Meta(BaseTable.Meta):
+        model = Backup
+        fields = (
+            'pk', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status'
+        )
+        default_columns = (
+            'pk', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status'
+        )
+
+    def render_backup_count(self, value):
+        return f'{value.count()}'
+
+
 class BackupTable(BaseTable):
     pk = columns.ToggleColumn(
 

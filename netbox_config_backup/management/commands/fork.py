@@ -22,6 +22,8 @@ class Command(BaseCommand):
             self.stdout.write(f"Child {i} is running")
             self.stdout.write(f"Child {i} sleeping 10 seconds")
             time.sleep(10)
+            if i == 1:
+                raise Exception(f"Child {i} exception")
             self.stdout.write(f"Child {i} sleep complete")
 
         processes = {}
@@ -38,8 +40,11 @@ class Command(BaseCommand):
             for pid in list(processes.keys()):
                 process = processes.get(pid, None)
                 if not process.is_alive():
+                    print(f'{process} not alive')
                     del processes[pid]
             time.sleep(1)
+
+        self.stdout.write('Finished')
 
 
 

@@ -3,8 +3,12 @@ import logging
 from django.db import models
 from django.db.models import ForeignKey
 from django.utils import timezone
+from django.utils.translation import gettext as _
+
 from django_rq import get_queue
+
 from core.choices import JobStatusChoices
+from utilities.querysets import RestrictedQuerySet
 from .abstract import BigIDModel
 
 logger = logging.getLogger(f"netbox_config_backup")
@@ -17,6 +21,11 @@ class BackupJob(BigIDModel):
         blank=False,
         null=False,
         related_name='jobs',
+    )
+    pid = models.BigIntegerField(
+        verbose_name=_('PID'),
+        null=True,
+        blank=True,
     )
     created = models.DateTimeField(
         auto_now_add=True
@@ -45,6 +54,8 @@ class BackupJob(BigIDModel):
     job_id = models.UUIDField(
         unique=True
     )
+
+    objects = RestrictedQuerySet.as_manager()
 
     def __str__(self):
         return str(self.job_id)
