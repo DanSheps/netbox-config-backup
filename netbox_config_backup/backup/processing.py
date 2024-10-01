@@ -1,15 +1,23 @@
 import logging
 import os
+import traceback
 
+from django.db.models import Q
 from django.utils import timezone
 
 from core.choices import JobStatusChoices
+from netbox.api.exceptions import ServiceUnavailable
+from netbox_config_backup.models import BackupJob
 from netbox_config_backup.utils.configs import check_config_save_status
 from netbox_config_backup.utils.napalm import napalm_init
 from netbox_config_backup.utils.rq import can_backup
 
 logger = logging.getLogger(f"netbox_config_backup")
 
+
+def remove_stale_backupjobs(job: BackupJob):
+    BackupJob.objects.filter(backup=job.backup).exclude(status=JobStatusChoices.STATUS_COMPLETED).exclude(
+        pk=job.pk).delete()
 
 def run_backup(backup, job):
     pid = os.getpid()
@@ -32,7 +40,14 @@ def run_backup(backup, job):
         ip = backup.ip if backup.ip is not None else backup.device.primary_ip
 
         if ip:
-            d = napalm_init(backup.device, ip)
+            try:
+                d = napalm_init(backup.device, ip)
+            except (TimeoutError, ServiceUnavailable):
+                job.status = JobStatusChoices.STATUS_FAILED
+                job.data = {'error': f'Timeout Connecting to {backup.device} with ip {ip}'}
+                job.save()
+                return
+
             job.status = JobStatusChoices.STATUS_RUNNING
             job.started = timezone.now()
             job.save()
@@ -62,6 +77,7 @@ def run_backup(backup, job):
             job.status = JobStatusChoices.STATUS_COMPLETED
             job.completed = timezone.now()
             job.save()
+            remove_stale_backupjobs(job=job)
         else:
             job.status = JobStatusChoices.STATUS_FAILED
             if not job.data:
@@ -69,7 +85,7 @@ def run_backup(backup, job):
             job.data.update({'error': f'{backup}: No IP set'})
             job.full_clean()
             job.save()
-            logger.info(f'{backup}: No IP set')
+            logger.debug(f'{backup}: No IP set')
     except Exception as e:
         job.status = JobStatusChoices.STATUS_ERRORED
         if not job.data:
@@ -78,3 +94,4 @@ def run_backup(backup, job):
         job.full_clean()
         job.save()
         logger.error(f'Exception in {backup}: {e}')
+        logger.info(f'{backup}: {traceback.format_exc()}')

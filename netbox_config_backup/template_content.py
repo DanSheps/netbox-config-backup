@@ -31,10 +31,6 @@ class DeviceBackups(PluginTemplateExtension):
             instance = devices.first()
             table = build_table(instance)
 
-            if BackupJob.is_queued(instance) is False:
-                logger.debug(f'{instance}: Queuing Job')
-                BackupJob.enqueue(instance)
-
             if htmx_partial(request):
                 return self.render('htmx/table.html', extra_context={
                     'object': instance,
