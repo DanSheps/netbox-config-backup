@@ -1,0 +1,34 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block subtitle %}
+  <div class="object-subtitle"></div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+	<div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">
+                Backup Job
+            </h5>
+            <div class="card-body">
+                <table class="table table-hover">
+                    <tr>
+                        <th scope="row">Backup</th>
+                        <td>{{ object.backup|linkify }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Status</th>
+                        <td>{{ object.status }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% include 'inc/panels/comments.html' %}
+	</div>
+
+	<div class="col col-md-6">
+    </div>
+</div>
+{% endblock %}

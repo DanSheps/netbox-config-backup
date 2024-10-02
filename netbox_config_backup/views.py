@@ -9,16 +9,25 @@ from django.views import View
 from core.choices import JobStatusChoices
 from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView, \
     BulkEditView, BulkDeleteView
-from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet
+from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet, BackupJobFilterSet
 
-from netbox_config_backup.forms import BackupForm, BackupFilterSetForm, BackupBulkEditForm
+from netbox_config_backup.forms import BackupForm, BackupFilterSetForm, BackupBulkEditForm, BackupJobFilterSetForm
 from netbox_config_backup.git import GitBackup
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit, BackupObject
-from netbox_config_backup.tables import BackupTable, BackupsTable
+from netbox_config_backup.tables import BackupTable, BackupsTable, BackupJobTable
 from netbox_config_backup.utils import get_backup_tables, Differ
 from utilities.views import register_model_view, ViewTab
 
 logger = logging.getLogger(f"netbox_config_backup")
+
+
+class BackupJobListView(ObjectListView):
+    queryset = BackupJob.objects.all()
+
+    filterset = BackupJobFilterSet
+    filterset_form = BackupJobFilterSetForm
+    table = BackupJobTable
+    action_buttons = ()
 
 
 class BackupListView(ObjectListView):
@@ -46,10 +55,6 @@ class BackupView(ObjectView):
 
     def get_extra_context(self, request, instance):
 
-        if BackupJob.is_queued(instance) is False:
-            logger.debug(f'{instance}: Queuing Job')
-            BackupJob.enqueue_if_needed(instance)
-
         jobs = BackupJob.objects.filter(backup=instance).order_by()
         is_running = True if jobs.filter(status=JobStatusChoices.STATUS_RUNNING).count() > 0 else False
         is_pending = True if jobs.filter(status=JobStatusChoices.STATUS_PENDING).count() > 0 else False
@@ -62,7 +67,6 @@ class BackupView(ObjectView):
 
         status = {
             'status': job_status,
-            'scheduled': BackupJob.is_queued(instance),
             'next_attempt': instance.next_attempt,
             'last_job': instance.jobs.filter(completed__isnull=False).last(),
             'last_success': instance.last_backup,

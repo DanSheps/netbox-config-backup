@@ -5,12 +5,24 @@ from django.db.models import Q
 from django.utils.translation import gettext as _
 from netaddr import AddrFormatError
 
+from core.choices import JobStatusChoices
 from ipam.models import IPAddress
 from netbox.filtersets import NetBoxModelFilterSet, BaseFilterSet
 from dcim.models import Device
 from netbox_config_backup import models
 from netbox_config_backup.choices import FileTypeChoices
 from utilities.filters import MultiValueCharFilter
+
+
+class BackupJobFilterSet(BaseFilterSet):
+    q = django_filters.CharFilter(
+        method='search',
+        label=_('Search'),
+    )
+
+    class Meta:
+        model = models.BackupJob
+        fields = ['id', 'status']
 
 
 class BackupFilterSet(BaseFilterSet):

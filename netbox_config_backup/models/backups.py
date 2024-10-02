@@ -9,13 +9,11 @@ from django.urls import reverse
 from django_rq import get_queue
 
 from dcim.models import Device
-from core.choices import JobStatusChoices
 from netbox.models import PrimaryModel
 
 from netbox_config_backup.choices import StatusChoices
 from netbox_config_backup.helpers import get_repository_dir
 
-from netbox_config_backup.utils.rq import remove_queued
 from ..querysets import BackupQuerySet
 from ..utils import Differ
 
@@ -57,27 +55,6 @@ class Backup(PrimaryModel):
 
     def __str__(self):
         return self.name
-
-    def delete(self, *args, **kwargs):
-        queue = get_queue('netbox_config_backup.jobs')
-        remove_queued(self)
-
-        super().delete(*args, **kwargs)
-
-    def enqueue_if_needed(self):
-        from netbox_config_backup.utils.rq import enqueue_if_needed
-        return enqueue_if_needed(self)
-
-    def requeue(self):
-        self.jobs.filter(
-            ~Q(status=JobStatusChoices.STATUS_COMPLETED) &
-            ~Q(status=JobStatusChoices.STATUS_FAILED) &
-            ~Q(status=JobStatusChoices.STATUS_ERRORED)
-        ).update(
-            status=JobStatusChoices.STATUS_FAILED
-        )
-        remove_queued(self)
-        self.enqueue_if_needed()
 
     def get_config(self, index='HEAD'):
         from netbox_config_backup.git import repository
@@ -123,7 +100,7 @@ class Backup(PrimaryModel):
         else:
             #logger.debug(f'[{pk}] Saving commit')
             bc = BackupCommit(sha=commit, time=time)
-            logger.info(f'{self}: {commit}:{bc.time}')
+            logger.debug(f'{self}: {commit}:{bc.time}')
             bc.save()
 
         for change in log.get('changes', []):

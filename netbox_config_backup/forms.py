@@ -3,15 +3,18 @@ from django.core.exceptions import ValidationError
 from django.forms import CharField
 from django.utils.translation import gettext as _
 
+from core.choices import JobStatusChoices
 from dcim.choices import DeviceStatusChoices
 from dcim.models import Device
 from ipam.models import IPAddress
 from netbox.forms import NetBoxModelForm, NetBoxModelBulkEditForm
-from netbox_config_backup.models import Backup
+from netbox_config_backup.models import Backup, BackupJob
+from utilities.forms import add_blank_choice
 from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField, CommentField
 
 __all__ = (
     'BackupForm',
+    'BackupJobFilterSetForm',
     'BackupFilterSetForm',
     'BackupBulkEditForm',
 )
@@ -57,6 +60,18 @@ class BackupForm(NetBoxModelForm):
                 raise ValidationError({'device': f'{device} has no platform set'})
             elif not hasattr(device.platform, 'napalm'):
                 raise ValidationError({'device': f'{device}\'s platform ({device.platform}) has no napalm driver'})
+
+
+class BackupJobFilterSetForm(forms.Form):
+    model = BackupJob
+    field_order = [
+        'q', 'status',
+    ]
+    status = forms.MultipleChoiceField(
+        required=False,
+        choices=add_blank_choice(JobStatusChoices),
+        label=_('Status')
+    )
 
 
 class BackupFilterSetForm(forms.Form):

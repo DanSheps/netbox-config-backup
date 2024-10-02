@@ -5,6 +5,7 @@ from . import views
 from .models import Backup
 
 urlpatterns = [
+    path('jobs/', views.BackupJobListView.as_view(), name='backupjob_list'),
     path('unassigned/', views.UnassignedBackupListView.as_view(), name='unassignedbackup_list'),
     path('devices/', views.BackupListView.as_view(), name='backup_list'),
     path('devices/add/', views.BackupEditView.as_view(), name='backup_add'),
