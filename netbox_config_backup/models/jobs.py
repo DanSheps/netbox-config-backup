@@ -8,13 +8,14 @@ from django.utils.translation import gettext as _
 from django_rq import get_queue
 
 from core.choices import JobStatusChoices
+from netbox.models import NetBoxModel
 from utilities.querysets import RestrictedQuerySet
 from .abstract import BigIDModel
 
 logger = logging.getLogger(f"netbox_config_backup")
 
 
-class BackupJob(BigIDModel):
+class BackupJob(NetBoxModel):
     runner = models.ForeignKey(
         verbose_name=_('Job Run'),
         to='core.Job',

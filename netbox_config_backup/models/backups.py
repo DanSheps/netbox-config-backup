@@ -100,7 +100,7 @@ class Backup(PrimaryModel):
         else:
             #logger.debug(f'[{pk}] Saving commit')
             bc = BackupCommit(sha=commit, time=time)
-            logger.info(f'{self}: {commit}:{bc.time}')
+            logger.debug(f'{self}: {commit}:{bc.time}')
             bc.save()
 
         for change in log.get('changes', []):

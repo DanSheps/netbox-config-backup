@@ -14,6 +14,7 @@ from netbox.jobs import JobRunner
 from netbox_config_backup.backup.processing import run_backup
 from netbox_config_backup.choices import StatusChoices
 from netbox_config_backup.models import Backup, BackupJob
+from netbox_config_backup.utils.db import close_db
 from netbox_config_backup.utils.rq import can_backup
 
 logger = logging.getLogger(f"netbox_config_backup")
@@ -92,7 +93,6 @@ class BackupRunner(JobRunner):
 
     def run_processes(self):
         for job in BackupJob.objects.filter(status=JobStatusChoices.STATUS_SCHEDULED):
-            job.refresh_from_db()
             try:
                 process = self.fork_process(job)
                 process.join(1)
@@ -102,21 +102,22 @@ class BackupRunner(JobRunner):
                 job.save()
 
     def fork_process(self, job):
-        backup = Backup.objects.get(pk=job.backup.pk)
-        process = Process(target=run_backup, args=(job.pk, backup.pk), )
+        close_db()
+        process = Process(target=run_backup, args=(job.pk, ), )
         data = {
-            backup.pk: {
+            job.backup.pk: {
                 'process': process,
-                'backup': backup.pk,
+                'backup': job.backup.pk,
                 'job': job.pk
             }
         }
         self.processes.update(data)
         process.start()
-        logger.debug(f'Forking process {process.pid} for {backup} backup')
+        logger.debug(f'Forking process {process.pid} for {job.backup} backup')
         return process
 
     def handle_processes(self):
+        close_db()
         for pk in list(self.processes.keys()):
             process = self.processes.get(pk, {}).get('process')
             job_pk = self.processes.get(pk, {}).get('job')
@@ -136,9 +137,7 @@ class BackupRunner(JobRunner):
     def run(self, *args, **kwargs):
         try:
             self.clean_stale_jobs()
-            time.sleep(5)
             self.schedule_jobs()
-            time.sleep(5)
             self.run_processes()
             while(True):
                 self.handle_processes()

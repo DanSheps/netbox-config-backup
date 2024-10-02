@@ -9,6 +9,7 @@ from django.utils import timezone
 from core.choices import JobStatusChoices
 from netbox.api.exceptions import ServiceUnavailable
 from netbox_config_backup.models import BackupJob, Backup
+from netbox_config_backup.utils.db import close_db
 from netbox_config_backup.utils.configs import check_config_save_status
 from netbox_config_backup.utils.napalm import napalm_init
 from netbox_config_backup.utils.rq import can_backup
@@ -19,7 +20,8 @@ logger = logging.getLogger(f"netbox_config_backup")
 def remove_stale_backupjobs(job: BackupJob):
     pass
 
-def run_backup(job_id, backup_id):
+def run_backup(job_id):
+    close_db()
     logger.info(f'Starting backup for job {job_id}')
     try:
         job = BackupJob.objects.get(pk=job_id)
@@ -29,7 +31,7 @@ def run_backup(job_id, backup_id):
         raise e
 
     try:
-        backup = Backup.objects.get(pk=backup_id)
+        backup = Backup.objects.get(pk=job.backup.pk)
         backup.refresh_from_db()
         pid = os.getpid()
 
