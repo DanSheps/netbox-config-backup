@@ -41,16 +41,7 @@ PLUGINS_CONFIG = {
 }
 ```
 3. Migrate: `python3 netbox/manage.py migrate`
-4. Copy /etc/systemd/system/netbox-rq.service to /etc/systemd/system/ncb-rq\@.service
-5. Edit: /etc/systemd/system/ncb-rq\@.service:
-ExecStart:
-```
-ExecStart=/opt/netbox/venv/bin/python3 /opt/netbox/netbox/manage.py rqworker --name ncb@%i --with-scheduler netbox_config_backup.jobs
-```
-6. Reload systemd: `systemctl daemon-reload`
-7. Enable the service with x number of workers: `systemctl enable ncb-rq@{1..10}` (This will generate 10 worker symlinks to auto start)
-8. Start the service with x number of workers: `systemctl start ncb-rq@{1..10}` (This will start 10 workers)
-9. Create your first device backup
+4. Create your first device backup
 
 ## Logging
 
