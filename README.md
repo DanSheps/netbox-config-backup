@@ -43,6 +43,10 @@ PLUGINS_CONFIG = {
 3. Migrate: `python3 netbox/manage.py migrate`
 4. Create your first device backup
 
+### Cleanup Old Version
+
+If you are coming from an older version, please remove the custom RQ worker as it is no longer required
+
 ## Logging
 
 To enable logging, add the following to your configuration.py under LOGGING:
