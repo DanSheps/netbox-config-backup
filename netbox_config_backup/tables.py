@@ -8,6 +8,9 @@ from netbox.tables import columns, BaseTable, NetBoxTable
 class ActionButtonsColumn(tables.TemplateColumn):
     attrs = {'td': {'class': 'text-end text-nowrap noprint min-width'}}
     template_code = """
+    <a href="{% url 'plugins:netbox_config_backup:backup_compliance' backup=record.backup.pk current=record.pk %}" class="btn btn-sm btn-outline-dark" title="View">
+        <i class="mdi mdi-check-all"></i>
+    </a>
     <a href="{% url 'plugins:netbox_config_backup:backup_config' backup=record.backup.pk current=record.pk %}" class="btn btn-sm btn-outline-dark" title="View">
         <i class="mdi mdi-cloud-download"></i>
     </a>

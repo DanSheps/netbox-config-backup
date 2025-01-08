@@ -59,8 +59,17 @@ class BackupRunner(JobRunner):
                 job.data.update({'error': 'Process terminated'})
                 job.save()
 
-    def schedule_jobs(self):
-        backups = Backup.objects.filter(status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
+    def schedule_jobs(self, backup=None, device=None):
+        if backup:
+            logging.debug(f'Scheduling backup for backup: {backup}')
+            backups = Backup.objects.filter(pk=backup.pk, status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
+        elif device:
+            logging.debug(f'Scheduling backup for device: {device}')
+            backups = Backup.objects.filter(device=device, status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
+        else:
+            logging.debug(f'Scheduling all backups')
+            backups = Backup.objects.filter(status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
+
         for backup in backups:
             if can_backup(backup):
                 logger.debug(f'Queuing device {backup.device} for backup')
@@ -92,7 +101,7 @@ class BackupRunner(JobRunner):
                     job.save()
 
     def run_processes(self):
-        for job in BackupJob.objects.filter(status=JobStatusChoices.STATUS_SCHEDULED):
+        for job in BackupJob.objects.filter(runner=self.job, status=JobStatusChoices.STATUS_SCHEDULED):
             try:
                 process = self.fork_process(job)
                 process.join(1)
@@ -134,10 +143,10 @@ class BackupRunner(JobRunner):
                     job.data.update({'error': 'Process terminated'})
                     job.save()
 
-    def run(self, *args, **kwargs):
+    def run(self, backup=None, device=None, *args, **kwargs):
         try:
             self.clean_stale_jobs()
-            self.schedule_jobs()
+            self.schedule_jobs(backup=backup, device=device)
             self.run_processes()
             while(True):
                 self.handle_processes()

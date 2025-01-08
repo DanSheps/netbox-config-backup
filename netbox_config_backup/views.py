@@ -1,12 +1,16 @@
 import logging
 
+from django.contrib import messages
 from django.db import models
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse, NoReverseMatch
+from django.utils.translation import gettext as _
 from django.views import View
+from jinja2 import TemplateError
 
 from core.choices import JobStatusChoices
+from dcim.models import Device
 from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView, \
     BulkEditView, BulkDeleteView
 from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet, BackupJobFilterSet
@@ -101,11 +105,10 @@ class BackupBackupsView(ObjectChildrenView):
 
     def get_extra_context(self, request, instance):
         return {
+            'backup': instance,
             'running': bool(request.GET.get('type') == 'running'),
             'startup': bool(request.GET.get('type') == 'startup'),
         }
-
-
 
 
 @register_model_view(Backup, 'edit')
@@ -203,6 +206,73 @@ class ConfigView(ObjectView):
         })
 
 
+@register_model_view(Backup, 'compliance')
+class ComplianceView(ObjectView):
+    queryset = Backup.objects.all()
+    template_name = 'netbox_config_backup/compliance.html'
+    tab = ViewTab(
+        label='Compliance',
+        weight=500,
+    )
+
+    def get_rendered_config(self, request, backup):
+        instance = backup.device
+        config_template = instance.get_config_template()
+        context_data = instance.get_config_context()
+        context_data.update({'device': instance})
+        try:
+            rendered_config = config_template.render(context=context_data)
+        except TemplateError as e:
+            messages.error(request, _("An error occurred while rendering the template: {error}").format(error=e))
+            rendered_config = ''
+        return rendered_config
+
+    def get_current_backup(self, current, backup):
+        if current:
+            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+        else:
+            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
+            if not current:
+                raise Http404(
+                    "No current commit available"
+                )
+        repo = GitBackup()
+        current_sha = current.commit.sha if current.commit is not None else 'HEAD'
+        current_config = repo.read(current.file.path, current_sha)
+
+    def get_diff(self, backup, rendered, current):
+        if backup.device and backup.device.platform.napalm.napalm_driver in ['ios', 'nxos']:
+            differ = Differ(rendered, current)
+            diff = differ.cisco_compare()
+        else:
+            differ = Differ(rendered, current)
+            diff = differ.compare()
+
+        for idx, line in enumerate(diff):
+            diff[idx] = line.rstrip()
+        return diff
+
+
+    def get(self, request, backup, current=None, previous=None):
+        backup = get_object_or_404(Backup.objects.all(), pk=backup)
+
+        diff = ['No rendered configuration', ]
+        rendered_config = None
+        if backup.device and backup.device.get_config_template():
+            rendered_config = self.get_rendered_config(request=request, backup=backup)
+            current_config = self.get_current_backup(backup=backup, current=current)
+            if rendered_config:
+                diff = self.get_diff(backup=backup, rendered=rendered_config, current=current_config)
+
+        return render(request, self.template_name, {
+            'object': backup,
+            'tab': self.tab,
+            'diff': diff,
+            'current': current,
+            'active_tab': 'compliance',
+        })
+
+
 @register_model_view(Backup, 'diff')
 class DiffView(ObjectView):
     queryset = Backup.objects.all()
@@ -282,3 +352,33 @@ class DiffView(ObjectView):
             'previous': previous,
             'active_tab': 'diff',
         })
+
+
+@register_model_view(Device, name='backups')
+class DeviceBackupsView(ObjectChildrenView):
+    queryset = Device.objects.all()
+
+    template_name = 'netbox_config_backup/backups.html'
+    child_model = BackupCommitTreeChange
+    table = BackupsTable
+    filterset = BackupsFilterSet
+    actions = {
+        'config': {'view'},
+        'diff': {'view'},
+        'bulk_diff': {'view'}
+    }
+    tab = ViewTab(
+        label='Backups',
+        weight=100,
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup__device=obj, file__isnull=False).count(),
+    )
+
+    def get_children(self, request, parent):
+        return self.child_model.objects.filter(backup__device=parent, file__isnull=False)
+
+    def get_extra_context(self, request, instance):
+        return {
+            'backup': instance.backups.filter(status='active').last(),
+            'running': bool(request.GET.get('type') == 'running'),
+            'startup': bool(request.GET.get('type') == 'startup'),
+        }

@@ -31,6 +31,7 @@ class Backup(PrimaryModel):
     device = models.ForeignKey(
         to=Device,
         on_delete=models.SET_NULL,
+        related_name='backups',
         blank=True,
         null=True
     )
