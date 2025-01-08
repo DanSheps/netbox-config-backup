@@ -1,0 +1,34 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block subtitle %}
+  <div class="object-subtitle">
+    <span>{{ current.commit.time }}</span>
+  </div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+	<div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header">
+                Configuration Compliance
+            </h5>
+            <div class="card-body">
+                <pre class="change-data">{% for line in diff %}{% spaceless %}
+                    {% if line == '+++' or line == '---' %}
+                    {% elif line|make_list|first == '@' %}
+                        <span style="background-color: #ffdb58; color: black;">{{line}}</span>
+                    {% elif line|make_list|first == '+' %}
+                        <span class="added"> {{line|make_list|slice:'1:'|join:''}}</span>
+                    {% elif line|make_list|first == '-' %}
+                        <span class="removed"> {{line|make_list|slice:'1:'|join:''}}</span>
+                    {% else %}
+                        <span>{{line}}</span>
+                    {% endif %}
+                {% endspaceless %}{% endfor %}</pre>
+            </div>
+        </div>
+	</div>
+</div>
+{% endblock %}
