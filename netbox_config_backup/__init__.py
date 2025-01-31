@@ -38,7 +38,7 @@ class NetboxConfigBackup(PluginConfig):
     def ready(self, *args, **kwargs):
         super().ready()
         import sys
-        if 'rqworker' in sys.argv[1]:
+        if len(sys.argv) > 1 and 'rqworker' in sys.argv[1]:
             from netbox import settings
             from netbox_config_backup.jobs.backup import BackupRunner
             frequency = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency') / 60
