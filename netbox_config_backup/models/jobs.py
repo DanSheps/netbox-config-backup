@@ -2,6 +2,7 @@ import logging
 
 from django.db import models
 from django.db.models import ForeignKey
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
@@ -68,6 +69,9 @@ class BackupJob(NetBoxModel):
 
     def __str__(self):
         return str(self.job_id)
+
+    def get_absolute_url(self):
+        return None
 
     @property
     def queue(self):
