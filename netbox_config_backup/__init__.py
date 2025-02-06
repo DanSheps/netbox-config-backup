@@ -46,8 +46,13 @@ class NetboxConfigBackup(PluginConfig):
 
             if not lastjob:
                 BackupRunner.enqueue_once(interval=frequency)
-            elif lastjob.status in JobStatusChoices.ENQUEUED_STATE_CHOICES and lastjob.scheduled < timezone.now():
-                BackupRunner.enqueue_once(interval=frequency)
+            elif lastjob.status in JobStatusChoices.ENQUEUED_STATE_CHOICES:
+                if lastjob.scheduled and lastjob.scheduled < timezone.now():
+                    BackupRunner.enqueue_once(interval=frequency)
+                elif not lastjob.scheduled:
+                    lastjob.scheduled = timezone.now()
+                    lastjob.clean()
+                    lastjob.save()
             elif lastjob.status in JobStatusChoices.TERMINAL_STATE_CHOICES:
                 scheduled = lastjob.created + timezone.timedelta(minutes=frequency)
                 if scheduled < timezone.now():
