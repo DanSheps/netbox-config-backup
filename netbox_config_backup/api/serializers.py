@@ -39,7 +39,7 @@ class BackupJobSerializer(NetBoxModelSerializer):
     class Meta:
         model = BackupJob
         fields = [
-            'id', 'url', 'display', 'runner', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status'
+            'id', 'url', 'display', 'runner', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status',
             'data', 'status', 'job_id',
         ]
         brief_fields = ('backup', 'display', 'id', 'runner', 'url')
