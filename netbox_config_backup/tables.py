@@ -1,7 +1,7 @@
 import django_tables2 as tables
 from django_tables2.utils import Accessor
 
-from netbox_config_backup.models import Backup, BackupCommitTreeChange
+from netbox_config_backup.models import Backup, BackupCommitTreeChange, BackupJob
 from netbox.tables import columns, BaseTable, NetBoxTable
 
 
@@ -44,7 +44,7 @@ class BackupJobTable(BaseTable):
     completed = tables.DateTimeColumn()
 
     class Meta(BaseTable.Meta):
-        model = Backup
+        model = BackupJob
         fields = (
             'pk', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status'
         )
