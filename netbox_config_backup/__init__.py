@@ -39,26 +39,7 @@ class NetboxConfigBackup(PluginConfig):
         super().ready()
         import sys
         if len(sys.argv) > 1 and 'rqworker' in sys.argv[1]:
-            from netbox import settings
             from netbox_config_backup.jobs.backup import BackupRunner
-            frequency = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency') / 60
-            lastjob = BackupRunner.get_jobs().order_by('pk').last()
-
-            if not lastjob:
-                BackupRunner.enqueue_once(interval=frequency)
-            elif lastjob.status in JobStatusChoices.ENQUEUED_STATE_CHOICES:
-                if lastjob.scheduled and lastjob.scheduled < timezone.now():
-                    BackupRunner.enqueue_once(interval=frequency)
-                elif not lastjob.scheduled:
-                    lastjob.scheduled = timezone.now()
-                    lastjob.clean()
-                    lastjob.save()
-            elif lastjob.status in JobStatusChoices.TERMINAL_STATE_CHOICES:
-                scheduled = lastjob.created + timezone.timedelta(minutes=frequency)
-                if scheduled < timezone.now():
-                    scheduled = None
-                BackupRunner.enqueue_once(interval=frequency, schedule_at=scheduled)
-
 
 
 config = NetboxConfigBackup

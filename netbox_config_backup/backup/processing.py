@@ -2,11 +2,14 @@ import logging
 import os
 import time
 import traceback
+from datetime import timedelta
 
+import uuid
 from django.db.models import Q
 from django.utils import timezone
 
 from core.choices import JobStatusChoices
+from netbox import settings
 from netbox.api.exceptions import ServiceUnavailable
 from netbox_config_backup.models import BackupJob, Backup
 from netbox_config_backup.utils.db import close_db
@@ -91,6 +94,21 @@ def run_backup(job_id):
             commit = backup.set_config(configs)
 
             d.close()
+
+            frequency = timedelta(
+                seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency', 3600)
+            )
+            new = BackupJob(
+                runner=None,
+                backup=job.backup,
+                status=JobStatusChoices.STATUS_SCHEDULED,
+                scheduled=timezone.now() + frequency,
+                job_id=uuid.uuid4(),
+                data={},
+            )
+            new.full_clean()
+            new.save()
+
             logger.info(f'{backup}: Backup complete')
             job.status = JobStatusChoices.STATUS_COMPLETED
             job.completed = timezone.now()

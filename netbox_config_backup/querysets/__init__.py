@@ -19,9 +19,7 @@ class BackupQuerySet(RestrictedQuerySet):
             next_attempt=models.Subquery(
                 BackupJob.objects.filter(
                     backup=models.OuterRef('id'),
-                    status__in=[
-                        JobStatusChoices.STATUS_PENDING, JobStatusChoices.STATUS_RUNNING
-                    ]
+                    status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES
                 ).order_by('-scheduled').values('scheduled')[:1]
             ),
             last_change=models.Subquery(
