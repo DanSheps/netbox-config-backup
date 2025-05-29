@@ -1,7 +1,11 @@
+from typing import Annotated
+
+import strawberry
 import strawberry_django
+
 from netbox_config_backup import filtersets, models
 
-from netbox.graphql.filter_mixins import autotype_decorator, BaseFilterMixin
+from netbox.graphql.filter_mixins import BaseObjectTypeFilterMixin
 
 __all__ = (
     'BackupFilter',
@@ -9,6 +13,6 @@ __all__ = (
 
 
 @strawberry_django.filter(models.Backup, lookups=True)
-@autotype_decorator(filtersets.BackupFilterSet)
-class BackupFilter(BaseFilterMixin):
-    pass
+class BackupFilter(BaseObjectTypeFilterMixin):
+    device: Annotated['DeviceFilter', strawberry.lazy('dcim.graphql.filters')] | None = strawberry_django.filter_field()
+    device_id: strawberry.ID | None = strawberry_django.filter_field()

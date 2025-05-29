@@ -14,7 +14,7 @@ logger = logging.getLogger(f"netbox_config_backup")
 
 
 def can_backup(backup):
-    logger.debug(f'Checking backup status for {backup}')
+    logger.debug(f'Checking backup suitability for {backup}')
     if backup.device is None:
         logger.info(f'No device for {backup}')
         return False

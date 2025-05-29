@@ -31,6 +31,10 @@ class ActionButtonsColumn(tables.TemplateColumn):
 
 
 class BackupJobTable(BaseTable):
+    id = tables.Column(
+        linkify=True,
+        verbose_name='ID'
+    )
     pk = columns.ToggleColumn(
 
     )
@@ -46,7 +50,7 @@ class BackupJobTable(BaseTable):
     class Meta(BaseTable.Meta):
         model = BackupJob
         fields = (
-            'pk', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status'
+            'pk', 'id', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status'
         )
         default_columns = (
             'pk', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status'

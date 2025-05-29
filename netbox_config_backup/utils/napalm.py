@@ -70,7 +70,8 @@ def napalm_init(device, ip=None, extra_args={}):
         d.open()
     except Exception as e:
         if isinstance(e, NetmikoAuthenticationException):
-            logger.info('Authentication error')
+            logger.info(f'Authentication error for f{device}:{host}')
+            logger.info(f'{e}')
         elif isinstance(e, NetmikoTimeoutException):
             logger.info('Connection error')
         raise ServiceUnavailable(
