@@ -6,7 +6,6 @@ import traceback
 import multiprocessing
 from datetime import timedelta
 
-import sentry_sdk
 from django.utils import timezone
 
 from core.choices import JobStatusChoices, JobIntervalChoices
@@ -140,7 +139,12 @@ class BackupRunner(JobRunner):
                 job.pid = process.pid
                 job.status = JobStatusChoices.STATUS_RUNNING
             except Exception as e:
-                sentry_sdk.capture_exception(e)
+                try:
+                    import sentry_sdk
+
+                    sentry_sdk.capture_exception(e)
+                except ModuleNotFoundError:
+                    pass
                 job.status = JobStatusChoices.STATUS_FAILED
                 job.data['error'] = str(e)
 
@@ -286,7 +290,12 @@ class BackupRunner(JobRunner):
         except JobExit as e:
             raise e
         except Exception as e:
-            sentry_sdk.capture_exception(e)
+            try:
+                import sentry_sdk
+
+                sentry_sdk.capture_exception(e)
+            except ModuleNotFoundError:
+                pass
             logger.warning(f'{traceback.format_exc()}')
             logger.error(f'{e}')
             raise e
