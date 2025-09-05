@@ -9,6 +9,7 @@ from jinja2 import TemplateError
 
 from core.choices import JobStatusChoices
 from dcim.models import Device
+from netbox.object_actions import ObjectAction
 from netbox.views.generic import (
     ObjectDeleteView,
     ObjectEditView,
@@ -37,6 +38,27 @@ from netbox_config_backup.utils import Differ
 from utilities.views import register_model_view, ViewTab
 
 logger = logging.getLogger("netbox_config_backup")
+
+
+class ViewConfigAction(ObjectAction):
+    name = 'config'
+    label = _('Config')
+    permissions_required = {'view'}
+    template_name = 'netbox_config_backup/buttons/config.html'
+
+
+class DiffAction(ObjectAction):
+    name = 'diff'
+    label = _('Diff')
+    permissions_required = {'view'}
+    template_name = 'netbox_config_backup/buttons/diff.html'
+
+
+class BulkDiffAction(ObjectAction):
+    name = 'bulk_diff'
+    label = _('Bulk Diff')
+    permissions_required = {'view'}
+    template_name = 'netbox_config_backup/buttons/diff.html'
 
 
 class BackupJobListView(ObjectListView):
@@ -74,16 +96,8 @@ class BackupView(ObjectView):
     def get_extra_context(self, request, instance):
 
         jobs = BackupJob.objects.filter(backup=instance).order_by()
-        is_running = (
-            True
-            if jobs.filter(status=JobStatusChoices.STATUS_RUNNING).count() > 0
-            else False
-        )
-        is_pending = (
-            True
-            if jobs.filter(status=JobStatusChoices.STATUS_PENDING).count() > 0
-            else False
-        )
+        is_running = True if jobs.filter(status=JobStatusChoices.STATUS_RUNNING).count() > 0 else False
+        is_pending = True if jobs.filter(status=JobStatusChoices.STATUS_PENDING).count() > 0 else False
 
         job_status = None
         if is_pending:
@@ -112,12 +126,10 @@ class BackupBackupsView(ObjectChildrenView):
     child_model = BackupCommitTreeChange
     table = BackupsTable
     filterset = BackupsFilterSet
-    actions = {'config': {'view'}, 'diff': {'view'}, 'bulk_diff': {'view'}}
+    # actions =  (ViewConfigAction, DiffAction, BulkDiffAction)
     tab = ViewTab(
         label='View Backups',
-        badge=lambda obj: BackupCommitTreeChange.objects.filter(
-            backup=obj, file__isnull=False
-        ).count(),
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup=obj, file__isnull=False).count(),
     )
 
     def get_children(self, request, parent):
@@ -161,9 +173,7 @@ class BackupDeleteView(ObjectDeleteView):
         if hasattr(self, 'queryset'):
             model_opts = self.queryset.model._meta
             try:
-                return reverse(
-                    f'plugins:{model_opts.app_label}:{model_opts.model_name}_list'
-                )
+                return reverse(f'plugins:{model_opts.app_label}:{model_opts.model_name}_list')
             except NoReverseMatch:
                 pass
 
@@ -197,13 +207,9 @@ class ConfigView(ObjectView):
     def get(self, request, backup, current=None):
         backup = get_object_or_404(Backup.objects.all(), pk=backup)
         if current:
-            current = get_object_or_404(
-                BackupCommitTreeChange.objects.all(), pk=current
-            )
+            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
         else:
-            current = BackupCommitTreeChange.objects.filter(
-                backup=backup, file__isnull=False
-            ).last()
+            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
             if not current:
                 raise Http404("No current commit available")
 
@@ -214,9 +220,7 @@ class ConfigView(ObjectView):
 
         previous = None
         if current is not None and current.old is not None:
-            previous = backup.changes.filter(
-                file__type=current.file.type, commit__time__lt=current.commit.time
-            ).last()
+            previous = backup.changes.filter(file__type=current.file.type, commit__time__lt=current.commit.time).last()
 
         return render(
             request,
@@ -251,22 +255,16 @@ class ComplianceView(ObjectView):
         except TemplateError as e:
             messages.error(
                 request,
-                _("An error occurred while rendering the template: {error}").format(
-                    error=e
-                ),
+                _("An error occurred while rendering the template: {error}").format(error=e),
             )
             rendered_config = ''
         return rendered_config
 
     def get_current_backup(self, current, backup):
         if current:
-            current = get_object_or_404(
-                BackupCommitTreeChange.objects.all(), pk=current
-            )
+            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
         else:
-            current = BackupCommitTreeChange.objects.filter(
-                backup=backup, file__isnull=False
-            ).last()
+            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
             if not current:
                 raise Http404("No current commit available")
         repo = GitBackup()
@@ -299,9 +297,7 @@ class ComplianceView(ObjectView):
             rendered_config = self.get_rendered_config(request=request, backup=backup)
             current_config = self.get_current_backup(backup=backup, current=current)
             if rendered_config:
-                diff = self.get_diff(
-                    backup=backup, rendered=rendered_config, current=current_config
-                )
+                diff = self.get_diff(backup=backup, rendered=rendered_config, current=current_config)
 
         return render(
             request,
@@ -326,9 +322,7 @@ class DiffView(ObjectView):
 
     def post(self, request, backup, *args, **kwargs):
         if request.POST.get('_all') and self.filterset is not None:
-            queryset = self.filterset(
-                request.GET, self.parent_model.objects.only('pk'), request=request
-            ).qs
+            queryset = self.filterset(request.GET, self.parent_model.objects.only('pk'), request=request).qs
             pk_list = [obj.pk for obj in queryset]
         else:
             pk_list = [int(pk) for pk in request.POST.getlist('pk')]
@@ -345,26 +339,18 @@ class DiffView(ObjectView):
             current = None
             previous = None
 
-        return self.get(
-            request=request, backup=backup, current=current, previous=previous
-        )
+        return self.get(request=request, backup=backup, current=current, previous=previous)
 
     def get(self, request, backup, current=None, previous=None):
         backup = get_object_or_404(Backup.objects.all(), pk=backup)
         if current:
-            current = get_object_or_404(
-                BackupCommitTreeChange.objects.all(), pk=current
-            )
+            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
         else:
-            current = BackupCommitTreeChange.objects.filter(
-                backup=backup, file__isnull=False
-            ).last()
+            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
             if not current:
                 raise Http404("No current commit available")
         if previous:
-            previous = get_object_or_404(
-                BackupCommitTreeChange.objects.all(), pk=previous
-            )
+            previous = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=previous)
         else:
             previous = BackupCommitTreeChange.objects.filter(
                 backup=backup,
@@ -418,19 +404,15 @@ class DeviceBackupsView(ObjectChildrenView):
     child_model = BackupCommitTreeChange
     table = BackupsTable
     filterset = BackupsFilterSet
-    actions = {'config': {'view'}, 'diff': {'view'}, 'bulk_diff': {'view'}}
+    # actions =  (ViewConfigAction, DiffAction, BulkDiffAction)
     tab = ViewTab(
         label='Backups',
         weight=100,
-        badge=lambda obj: BackupCommitTreeChange.objects.filter(
-            backup__device=obj, file__isnull=False
-        ).count(),
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup__device=obj, file__isnull=False).count(),
     )
 
     def get_children(self, request, parent):
-        return self.child_model.objects.filter(
-            backup__device=parent, file__isnull=False
-        )
+        return self.child_model.objects.filter(backup__device=parent, file__isnull=False)
 
     def get_extra_context(self, request, instance):
         return {

@@ -108,6 +108,7 @@ class BackupTable(BaseTable):
 
 
 class BackupsTable(NetBoxTable):
+    pk = columns.ToggleColumn(visible=True)
     date = tables.Column(accessor='commit__time')
     type = tables.Column(accessor='file__type')
     actions = ActionButtonsColumn()
@@ -117,6 +118,6 @@ class BackupsTable(NetBoxTable):
         fields = ('pk', 'id', 'date', 'type', 'backup', 'commit', 'file', 'actions')
         default_columns = ('pk', 'id', 'date', 'type', 'actions')
         attrs = {
-            'class': 'table table-hover object-list',
+            # 'class': 'table table-hover object-list',
         }
         order_by = ['-date']

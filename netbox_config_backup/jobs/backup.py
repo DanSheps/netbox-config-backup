@@ -19,19 +19,20 @@ from netbox_config_backup.models import Backup, BackupJob
 from netbox_config_backup.utils.db import close_db
 from netbox_config_backup.utils.rq import can_backup
 
+__all__ = ('BackupRunner',)
+
+
 logger = logging.getLogger("netbox_config_backup")
 
-job_frequency = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get(
-    'frequency', 3600
-)
+job_frequency = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency', 3600)
 
 
-@system_job(interval=JobIntervalChoices.INTERVAL_MINUTELY)
+@system_job(interval=JobIntervalChoices.INTERVAL_MINUTELY * 15)
 class BackupRunner(JobRunner):
     processes = {}
 
     class Meta:
-        name = 'The Backup Job Runner'
+        name = 'Backup Job Runner'
 
     @classmethod
     def fail_job(cls, job: BackupJob, status: str, error: str = ''):
@@ -66,9 +67,7 @@ class BackupRunner(JobRunner):
             if job != scheduled.filter(backup=job.backup).last():
                 results['scheduled'] += 1
                 cls.fail_job(job, JobStatusChoices.STATUS_ERRORED, 'Job missed')
-                logger.warning(
-                    f'Job {job.backup} appears to have been missed, deleting'
-                )
+                logger.warning(f'Job {job.backup} appears to have been missed, deleting')
 
         return results
 
@@ -77,19 +76,13 @@ class BackupRunner(JobRunner):
         scheduled_status = 0
         if backup:
             logging.debug(f'Scheduling backup for backup: {backup}')
-            backups = Backup.objects.filter(
-                pk=backup.pk, status=StatusChoices.STATUS_ACTIVE, device__isnull=False
-            )
+            backups = Backup.objects.filter(pk=backup.pk, status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
         elif device:
             logging.debug(f'Scheduling backup for device: {device}')
-            backups = Backup.objects.filter(
-                device=device, status=StatusChoices.STATUS_ACTIVE, device__isnull=False
-            )
+            backups = Backup.objects.filter(device=device, status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
         else:
             logging.debug('Scheduling all backups for')
-            backups = Backup.objects.filter(
-                status=StatusChoices.STATUS_ACTIVE, device__isnull=False
-            )
+            backups = Backup.objects.filter(status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
 
         frequency = timedelta(seconds=job_frequency)
 
@@ -97,12 +90,7 @@ class BackupRunner(JobRunner):
             if can_backup(backup):
                 logger.debug(f'Checking jobs for backup for {backup.device}' f'+')
                 jobs = BackupJob.objects.filter(backup=backup)
-                if (
-                    jobs.filter(
-                        status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES
-                    ).count()
-                    == 0
-                ):
+                if jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES).count() == 0:
                     logger.debug(f'Queuing device {backup.device} for backup')
                     if jobs.last().scheduled + frequency < timezone.now():
                         scheduled = timezone.now()
@@ -120,13 +108,9 @@ class BackupRunner(JobRunner):
                     job.save()
                     scheduled_status += 1
             else:
-                jobs = BackupJob.objects.filter(
-                    backup=backup, status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES
-                )
+                jobs = BackupJob.objects.filter(backup=backup, status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES)
                 for job in jobs:
-                    cls.fail_job(
-                        job, JobStatusChoices.STATUS_FAILED, 'Cannot queue job'
-                    )
+                    cls.fail_job(job, JobStatusChoices.STATUS_FAILED, 'Cannot queue job')
 
         return scheduled_status
 
@@ -179,9 +163,7 @@ class BackupRunner(JobRunner):
             target=run_backup,
             args=(job.pk,),
         )
-        data = {
-            job.backup.pk: {'process': process, 'backup': job.backup.pk, 'job': job.pk}
-        }
+        data = {job.backup.pk: {'process': process, 'backup': job.backup.pk, 'job': job.pk}}
         self.processes.update(data)
         process.start()
         logger.debug(f'Forking process {process.pid} for {job.backup} backup')
@@ -213,9 +195,7 @@ class BackupRunner(JobRunner):
             job_pk = self.processes.get(pk, {}).get('job')
             backup = self.processes.get(pk, {}).get('backup')
             if not process.is_alive():
-                logger.debug(
-                    f'Terminating process {process.pid} with job pk of {pk} for {backup}'
-                )
+                logger.debug(f'Terminating process {process.pid} with job pk of {pk} for {backup}')
                 process.terminate()
                 del self.processes[pk]
                 job = BackupJob.objects.filter(pk=job_pk).first()
@@ -267,7 +247,10 @@ class BackupRunner(JobRunner):
                 job.clean()
                 job.save()
                 process.terminate()
-                process.join()
+                try:
+                    process.join()
+                except AssertionError:
+                    pass
 
     def run(self, backup=None, device=None, *args, **kwargs):
 
