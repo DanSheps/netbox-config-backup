@@ -1,11 +1,9 @@
 import logging
 import os
-import time
 import traceback
 from datetime import timedelta
 
 import uuid
-from django.db.models import Q
 from django.utils import timezone
 
 from core.choices import JobStatusChoices
@@ -17,11 +15,12 @@ from netbox_config_backup.utils.configs import check_config_save_status
 from netbox_config_backup.utils.napalm import napalm_init
 from netbox_config_backup.utils.rq import can_backup
 
-logger = logging.getLogger(f"netbox_config_backup")
+logger = logging.getLogger("netbox_config_backup")
 
 
 def remove_stale_backupjobs(job: BackupJob):
     pass
+
 
 def run_backup(job_id):
     close_db()
@@ -66,12 +65,16 @@ def run_backup(job_id):
             raise e
 
         if ip:
-            logger.debug(f'Trying to connect to device {backup.device} with ip {ip} for {job}')
+            logger.debug(
+                f'Trying to connect to device {backup.device} with ip {ip} for {job}'
+            )
             try:
                 d = napalm_init(backup.device, ip)
             except (TimeoutError, ServiceUnavailable):
                 job.status = JobStatusChoices.STATUS_FAILED
-                job.data = {'error': f'Timeout Connecting to {backup.device} with ip {ip}'}
+                job.data = {
+                    'error': f'Timeout Connecting to {backup.device} with ip {ip}'
+                }
                 logger.debug(f'Timeout Connecting to {backup.device} with ip {ip}')
                 job.save()
                 return
@@ -81,7 +84,19 @@ def run_backup(job_id):
             job.save()
             try:
                 logger.debug(f'Checking config save status for {backup}')
-                status = check_config_save_status(d)
+                config_save_status = check_config_save_status(d)
+                status = config_save_status.get('status')
+                running = backup.files.filter(type='running').first()
+                startup = backup.files.filter(type='startup').first()
+                if running.last_change != config_save_status.get('running', None):
+                    running.last_change = config_save_status.get('running', None)
+                    running.clean()
+                    running.save()
+                if startup.last_change != config_save_status.get('startup', None):
+                    startup.last_change = config_save_status.get('startup', None)
+                    startup.clean()
+                    startup.save()
+
                 if status is not None:
                     if status and not backup.config_status:
                         backup.config_status = status
@@ -96,18 +111,23 @@ def run_backup(job_id):
                         backup.config_status = status
                         backup.save()
             except Exception as e:
+
                 logger.error(f'{backup}: had error setting backup status: {e}')
 
             logger.debug(f'Getting config for {backup}')
             configs = d.get_config()
             logger.debug(f'Committing config for {backup}')
             commit = backup.set_config(configs)
-            logger.debug(f'Committed config for {backup}; closing connection for {backup}')
+            logger.debug(
+                f'Committed config for {backup} with {commit}; closing connection for {backup}'
+            )
             d.close()
 
             logger.debug(f'Scheduling next backup for {backup}')
             frequency = timedelta(
-                seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency', 3600)
+                seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get(
+                    'frequency', 3600
+                )
             )
             new = BackupJob(
                 runner=None,

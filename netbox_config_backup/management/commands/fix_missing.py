@@ -5,21 +5,34 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     def handle(self, *args, **options):
         from netbox_config_backup.git import repository
-        from netbox_config_backup.models import Backup, BackupCommit, BackupFile, BackupObject, BackupCommitTreeChange
-        LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+        from netbox_config_backup.models import (
+            Backup,
+            BackupCommit,
+            BackupFile,
+            BackupObject,
+            BackupCommitTreeChange,
+        )
 
-        print(f'Fetching Git log')
+        LOCAL_TIMEZONE = (
+            datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+        )
+
+        print('Fetching Git log')
         log = reversed(repository.log())
-        print(f'Fetched Git log')
+        print('Fetched Git log')
 
         for entry in log:
-            time = entry.get('time', datetime.datetime.now()).replace(tzinfo=LOCAL_TIMEZONE)
+            time = entry.get('time', datetime.datetime.now()).replace(
+                tzinfo=LOCAL_TIMEZONE
+            )
 
             try:
                 bc = BackupCommit.objects.get(sha=entry.get('sha', None))
             except BackupCommit.DoesNotExist:
                 bc = BackupCommit(sha=entry.get('sha', None), time=time)
-            print(f'Saving commit: {bc.sha} at time {bc.time} with parent {entry.get("parents", [])}')
+            print(
+                f'Saving commit: {bc.sha} at time {bc.time} with parent {entry.get("parents", [])}'
+            )
             bc.save()
             for change in entry.get('changes'):
                 backup = None
@@ -36,9 +49,13 @@ class Command(BaseCommand):
                         except Backup.DoesNotExist:
                             backup = Backup.objects.create(uuid=uuid, name=uuid)
                         try:
-                            backupfile = BackupFile.objects.get(backup=backup, type=type)
+                            backupfile = BackupFile.objects.get(
+                                backup=backup, type=type
+                            )
                         except BackupFile.DoesNotExist:
-                            backupfile = BackupFile.objects.create(backup=backup, type=type)
+                            backupfile = BackupFile.objects.create(
+                                backup=backup, type=type
+                            )
                         try:
                             object = BackupObject.objects.get(sha=sha)
                         except BackupObject.DoesNotExist:
@@ -55,7 +72,7 @@ class Command(BaseCommand):
                         commit=bc,
                         type=change.get('type', None),
                         old=change_data.get('old', None),
-                        new=change_data.get('new', None)
+                        new=change_data.get('new', None),
                     )
                 except BackupCommitTreeChange.DoesNotExist:
                     bctc = BackupCommitTreeChange.objects.create(
@@ -64,7 +81,7 @@ class Command(BaseCommand):
                         commit=bc,
                         type=change.get('type', None),
                         old=change_data.get('old', None),
-                        new=change_data.get('new', None)
+                        new=change_data.get('new', None),
                     )
 
                 newsha = bctc.new.sha if bctc.new else None

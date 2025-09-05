@@ -10,6 +10,9 @@ class BackupCommit(BigIDModel):
     sha = models.CharField(max_length=64)
     time = models.DateTimeField()
 
+    class Meta:
+        ordering = ('pk',)
+
     def __str__(self):
         return self.sha
 
@@ -17,15 +20,29 @@ class BackupCommit(BigIDModel):
 class BackupObject(BigIDModel):
     sha = models.CharField(max_length=64, unique=True)
 
+    class Meta:
+        ordering = ('pk',)
+
     def __str__(self):
         return f'{self.sha}'
 
 
 class BackupFile(BigIDModel):
-    backup = models.ForeignKey(to=Backup, on_delete=models.CASCADE, null=False, blank=False, related_name='files')
-    type = models.CharField(max_length=10, choices=FileTypeChoices, null=False, blank=False)
+    backup = models.ForeignKey(
+        to=Backup,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='files',
+    )
+    type = models.CharField(
+        max_length=10, choices=FileTypeChoices, null=False, blank=False
+    )
+
+    last_change = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        ordering = ('pk',)
         unique_together = ['backup', 'type']
 
     def __str__(self):
@@ -41,13 +58,34 @@ class BackupFile(BigIDModel):
 
 
 class BackupCommitTreeChange(BigIDModel):
-    backup = models.ForeignKey(to=Backup, on_delete=models.CASCADE, null=False, blank=False, related_name='changes')
-    file = models.ForeignKey(to=BackupFile, on_delete=models.CASCADE, null=False, blank=False, related_name='changes')
+    backup = models.ForeignKey(
+        to=Backup,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='changes',
+    )
+    file = models.ForeignKey(
+        to=BackupFile,
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+        related_name='changes',
+    )
 
-    commit = models.ForeignKey(to=BackupCommit, on_delete=models.PROTECT, related_name='changes')
+    commit = models.ForeignKey(
+        to=BackupCommit, on_delete=models.PROTECT, related_name='changes'
+    )
     type = models.CharField(max_length=10)
-    old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True)
-    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True)
+    old = models.ForeignKey(
+        to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True
+    )
+    new = models.ForeignKey(
+        to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True
+    )
+
+    class Meta:
+        ordering = ('pk',)
 
     def __str__(self):
         return f'{self.commit.sha}-{self.type}'
@@ -56,8 +94,13 @@ class BackupCommitTreeChange(BigIDModel):
         return f'{self.backup.uuid}.{self.type}'
 
     def get_absolute_url(self):
-        return reverse('plugins:netbox_config_backup:backup_config', kwargs={'backup': self.backup.pk, 'current': self.pk})
+        return reverse(
+            'plugins:netbox_config_backup:backup_config',
+            kwargs={'backup': self.backup.pk, 'current': self.pk},
+        )
 
     @property
     def previous(self):
-        return self.backup.changes.filter(file__type=self.file.type, commit__time__lt=self.commit.time).last()
+        return self.backup.changes.filter(
+            file__type=self.file.type, commit__time__lt=self.commit.time
+        ).last()

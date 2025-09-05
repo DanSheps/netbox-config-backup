@@ -3,7 +3,7 @@ from netmiko import NetmikoAuthenticationException, NetmikoTimeoutException
 
 from netbox.api.exceptions import ServiceUnavailable
 
-logger = logging.getLogger(f"netbox_config_backup")
+logger = logging.getLogger("netbox_config_backup")
 
 
 def napalm_init(device, ip=None, extra_args={}):

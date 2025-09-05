@@ -7,16 +7,20 @@ import django.db.models.deletion
 def migrate_from_bo_to_bctc(apps, schema_editor):
     print('')
     print('!!!WARNING!!!')
-    print('Once this migration operation is complete, it is not recommended to revert it')
+    print(
+        'Once this migration operation is complete, it is not recommended to revert it'
+    )
 
-    BackupCommitTreeChange = apps.get_model('netbox_config_backup', 'BackupCommitTreeChange')
+    BackupCommitTreeChange = apps.get_model(
+        'netbox_config_backup', 'BackupCommitTreeChange'
+    )
     BackupFile = apps.get_model('netbox_config_backup', 'BackupFile')
     bctcs = BackupCommitTreeChange.objects.all()
     for bctc in bctcs:
         if bctc.new:
-            uuid, ftype = bctc.new.file.split('.')
+            uuid, ftype = bctc.new.file.split('.')  # noqa: F841
         else:
-            uuid, ftype = bctc.old.file.split('.')
+            uuid, ftype = bctc.old.file.split('.')  # noqa: F841
 
         try:
             bf = BackupFile.objects.get(backup=bctc.commit.backup, type=ftype)
@@ -32,9 +36,13 @@ def migrate_from_bo_to_bctc(apps, schema_editor):
 def migrate_from_bctc_to_bo(apps, schema_editor):
     print('')
     print('!!!!WARNING!!!')
-    print('This migration operation may fail and leave your netbox_config_backup database in an onconsistent state')
+    print(
+        'This migration operation may fail and leave your netbox_config_backup database in an onconsistent state'
+    )
 
-    BackupCommitTreeChange = apps.get_model('netbox_config_backup', 'BackupCommitTreeChange')
+    BackupCommitTreeChange = apps.get_model(
+        'netbox_config_backup', 'BackupCommitTreeChange'
+    )
     bctcs = BackupCommitTreeChange.objects.all()
     for bctc in bctcs:
         bctc.refresh_from_db()
@@ -87,7 +95,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='backupfile',
             name='backup',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='files', to='netbox_config_backup.backup'),
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='files',
+                to='netbox_config_backup.backup',
+            ),
         ),
         migrations.AlterUniqueTogether(
             name='backupfile',
@@ -96,28 +108,51 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='backupcommittreechange',
             name='backup',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='changes', to='netbox_config_backup.backup'),
+            field=models.ForeignKey(
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='changes',
+                to='netbox_config_backup.backup',
+            ),
         ),
         migrations.AddField(
             model_name='backupcommittreechange',
             name='file',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='changes', to='netbox_config_backup.backupfile'),
+            field=models.ForeignKey(
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='changes',
+                to='netbox_config_backup.backupfile',
+            ),
         ),
         migrations.AlterField(
             model_name='backupcommittreechange',
             name='new',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.PROTECT, related_name='changes', to='netbox_config_backup.backupobject'),
+            field=models.ForeignKey(
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name='changes',
+                to='netbox_config_backup.backupobject',
+            ),
         ),
         migrations.RunPython(migrate_from_bo_to_bctc, migrate_from_bctc_to_bo),
         migrations.AlterField(
             model_name='backupcommittreechange',
             name='backup',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='changes', to='netbox_config_backup.backup'),
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='changes',
+                to='netbox_config_backup.backup',
+            ),
         ),
         migrations.AlterField(
             model_name='backupcommittreechange',
             name='file',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='changes', to='netbox_config_backup.backupfile'),
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name='changes',
+                to='netbox_config_backup.backupfile',
+            ),
         ),
         migrations.RemoveField(
             model_name='backupobject',

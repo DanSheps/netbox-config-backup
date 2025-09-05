@@ -22,12 +22,32 @@ class Migration(migrations.Migration):
             fields=[
                 ('created', models.DateField(auto_now_add=True, null=True)),
                 ('last_updated', models.DateTimeField(auto_now=True, null=True)),
-                ('custom_field_data', models.JSONField(blank=True, default=dict, encoder=django.core.serializers.json.DjangoJSONEncoder)),
+                (
+                    'custom_field_data',
+                    models.JSONField(
+                        blank=True,
+                        default=dict,
+                        encoder=django.core.serializers.json.DjangoJSONEncoder,
+                    ),
+                ),
                 ('id', models.BigAutoField(primary_key=True, serialize=False)),
                 ('name', models.CharField(max_length=255)),
                 ('uuid', models.UUIDField(default=uuid.uuid4, editable=False)),
-                ('device', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='dcim.device')),
-                ('tags', taggit.managers.TaggableManager(through='extras.TaggedItem', to='extras.Tag')),
+                (
+                    'device',
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to='dcim.device',
+                    ),
+                ),
+                (
+                    'tags',
+                    taggit.managers.TaggableManager(
+                        through='extras.TaggedItem', to='extras.Tag'
+                    ),
+                ),
             ],
             options={
                 'ordering': ['name'],
@@ -43,7 +63,14 @@ class Migration(migrations.Migration):
                 ('status', models.CharField(default='pending', max_length=30)),
                 ('data', models.JSONField(blank=True, null=True)),
                 ('job_id', models.UUIDField(unique=True)),
-                ('backup', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='jobs', to='netbox_config_backup.backup')),
+                (
+                    'backup',
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name='jobs',
+                        to='netbox_config_backup.backup',
+                    ),
+                ),
             ],
             options={
                 'abstract': False,

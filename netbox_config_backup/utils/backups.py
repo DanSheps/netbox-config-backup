@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger(f"netbox_config_backup")
+logger = logging.getLogger("netbox_config_backup")
 
 
 def get_backup_tables(instance):
@@ -12,15 +12,25 @@ def get_backup_tables(instance):
         for row in data:
             commit = row.commit
             current = row
-            previous = row.backup.changes.filter(file__type=row.file.type, commit__time__lt=commit.time).last()
-            backup = {'pk': instance.pk, 'date': commit.time, 'current': current, 'previous': previous}
+            previous = row.backup.changes.filter(
+                file__type=row.file.type, commit__time__lt=commit.time
+            ).last()
+            backup = {
+                'pk': instance.pk,
+                'date': commit.time,
+                'current': current,
+                'previous': previous,
+            }
             backups.append(backup)
 
         table = BackupsTable(backups)
         return table
 
-    backups = BackupCommitTreeChange.objects.filter(backup=instance).prefetch_related('backup', 'new', 'old', 'commit',
-                                                                                      'file').order_by('commit__time')
+    backups = (
+        BackupCommitTreeChange.objects.filter(backup=instance)
+        .prefetch_related('backup', 'new', 'old', 'commit', 'file')
+        .order_by('commit__time')
+    )
 
     tables = {}
     for file in ['running', 'startup']:

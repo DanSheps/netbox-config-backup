@@ -1,28 +1,42 @@
 import logging
 
 from django.contrib import messages
-from django.db import models
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse, NoReverseMatch
 from django.utils.translation import gettext as _
-from django.views import View
 from jinja2 import TemplateError
 
 from core.choices import JobStatusChoices
 from dcim.models import Device
-from netbox.views.generic import ObjectDeleteView, ObjectEditView, ObjectView, ObjectListView, ObjectChildrenView, \
-    BulkEditView, BulkDeleteView
-from netbox_config_backup.filtersets import BackupFilterSet, BackupsFilterSet, BackupJobFilterSet
+from netbox.views.generic import (
+    ObjectDeleteView,
+    ObjectEditView,
+    ObjectView,
+    ObjectListView,
+    ObjectChildrenView,
+    BulkEditView,
+    BulkDeleteView,
+)
+from netbox_config_backup.filtersets import (
+    BackupFilterSet,
+    BackupsFilterSet,
+    BackupJobFilterSet,
+)
 
-from netbox_config_backup.forms import BackupForm, BackupFilterSetForm, BackupBulkEditForm, BackupJobFilterSetForm
+from netbox_config_backup.forms import (
+    BackupForm,
+    BackupFilterSetForm,
+    BackupBulkEditForm,
+    BackupJobFilterSetForm,
+)
 from netbox_config_backup.git import GitBackup
-from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange, BackupCommit, BackupObject
+from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange
 from netbox_config_backup.tables import BackupTable, BackupsTable, BackupJobTable
-from netbox_config_backup.utils import get_backup_tables, Differ
+from netbox_config_backup.utils import Differ
 from utilities.views import register_model_view, ViewTab
 
-logger = logging.getLogger(f"netbox_config_backup")
+logger = logging.getLogger("netbox_config_backup")
 
 
 class BackupJobListView(ObjectListView):
@@ -40,7 +54,7 @@ class BackupListView(ObjectListView):
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
     table = BackupTable
-    action_buttons = ('add', )
+    action_buttons = ('add',)
 
 
 class UnassignedBackupListView(ObjectListView):
@@ -60,8 +74,16 @@ class BackupView(ObjectView):
     def get_extra_context(self, request, instance):
 
         jobs = BackupJob.objects.filter(backup=instance).order_by()
-        is_running = True if jobs.filter(status=JobStatusChoices.STATUS_RUNNING).count() > 0 else False
-        is_pending = True if jobs.filter(status=JobStatusChoices.STATUS_PENDING).count() > 0 else False
+        is_running = (
+            True
+            if jobs.filter(status=JobStatusChoices.STATUS_RUNNING).count() > 0
+            else False
+        )
+        is_pending = (
+            True
+            if jobs.filter(status=JobStatusChoices.STATUS_PENDING).count() > 0
+            else False
+        )
 
         job_status = None
         if is_pending:
@@ -90,14 +112,12 @@ class BackupBackupsView(ObjectChildrenView):
     child_model = BackupCommitTreeChange
     table = BackupsTable
     filterset = BackupsFilterSet
-    actions = {
-        'config': {'view'},
-        'diff': {'view'},
-        'bulk_diff': {'view'}
-    }
+    actions = {'config': {'view'}, 'diff': {'view'}, 'bulk_diff': {'view'}}
     tab = ViewTab(
         label='View Backups',
-        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup=obj, file__isnull=False).count(),
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(
+            backup=obj, file__isnull=False
+        ).count(),
     )
 
     def get_children(self, request, parent):
@@ -141,7 +161,9 @@ class BackupDeleteView(ObjectDeleteView):
         if hasattr(self, 'queryset'):
             model_opts = self.queryset.model._meta
             try:
-                return reverse(f'plugins:{model_opts.app_label}:{model_opts.model_name}_list')
+                return reverse(
+                    f'plugins:{model_opts.app_label}:{model_opts.model_name}_list'
+                )
             except NoReverseMatch:
                 pass
 
@@ -175,13 +197,15 @@ class ConfigView(ObjectView):
     def get(self, request, backup, current=None):
         backup = get_object_or_404(Backup.objects.all(), pk=backup)
         if current:
-            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+            current = get_object_or_404(
+                BackupCommitTreeChange.objects.all(), pk=current
+            )
         else:
-            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
+            current = BackupCommitTreeChange.objects.filter(
+                backup=backup, file__isnull=False
+            ).last()
             if not current:
-                raise Http404(
-                    "No current commit available"
-                )
+                raise Http404("No current commit available")
 
         path = f'{current.file.path}'
 
@@ -190,20 +214,22 @@ class ConfigView(ObjectView):
 
         previous = None
         if current is not None and current.old is not None:
-            try:
-                previous = backup.changes.filter(file__type=current.file.type, commit__time__lt=current.commit.time).\
-                    last()
-            except:
-                pass
+            previous = backup.changes.filter(
+                file__type=current.file.type, commit__time__lt=current.commit.time
+            ).last()
 
-        return render(request, 'netbox_config_backup/config.html', {
-            'object': backup,
-            'tab': self.tab,
-            'backup_config': config,
-            'current': current,
-            'previous': previous,
-            'active_tab': 'config',
-        })
+        return render(
+            request,
+            'netbox_config_backup/config.html',
+            {
+                'object': backup,
+                'tab': self.tab,
+                'backup_config': config,
+                'current': current,
+                'previous': previous,
+                'active_tab': 'config',
+            },
+        )
 
 
 @register_model_view(Backup, 'compliance')
@@ -223,25 +249,35 @@ class ComplianceView(ObjectView):
         try:
             rendered_config = config_template.render(context=context_data)
         except TemplateError as e:
-            messages.error(request, _("An error occurred while rendering the template: {error}").format(error=e))
+            messages.error(
+                request,
+                _("An error occurred while rendering the template: {error}").format(
+                    error=e
+                ),
+            )
             rendered_config = ''
         return rendered_config
 
     def get_current_backup(self, current, backup):
         if current:
-            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+            current = get_object_or_404(
+                BackupCommitTreeChange.objects.all(), pk=current
+            )
         else:
-            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
+            current = BackupCommitTreeChange.objects.filter(
+                backup=backup, file__isnull=False
+            ).last()
             if not current:
-                raise Http404(
-                    "No current commit available"
-                )
+                raise Http404("No current commit available")
         repo = GitBackup()
         current_sha = current.commit.sha if current.commit is not None else 'HEAD'
-        current_config = repo.read(current.file.path, current_sha)
+        current_config = repo.read(current.file.path, current_sha)  # noqa: F841
 
     def get_diff(self, backup, rendered, current):
-        if backup.device and backup.device.platform.napalm.napalm_driver in ['ios', 'nxos']:
+        if backup.device and backup.device.platform.napalm.napalm_driver in [
+            'ios',
+            'nxos',
+        ]:
             differ = Differ(rendered, current)
             diff = differ.cisco_compare()
         else:
@@ -252,25 +288,32 @@ class ComplianceView(ObjectView):
             diff[idx] = line.rstrip()
         return diff
 
-
     def get(self, request, backup, current=None, previous=None):
         backup = get_object_or_404(Backup.objects.all(), pk=backup)
 
-        diff = ['No rendered configuration', ]
+        diff = [
+            'No rendered configuration',
+        ]
         rendered_config = None
         if backup.device and backup.device.get_config_template():
             rendered_config = self.get_rendered_config(request=request, backup=backup)
             current_config = self.get_current_backup(backup=backup, current=current)
             if rendered_config:
-                diff = self.get_diff(backup=backup, rendered=rendered_config, current=current_config)
+                diff = self.get_diff(
+                    backup=backup, rendered=rendered_config, current=current_config
+                )
 
-        return render(request, self.template_name, {
-            'object': backup,
-            'tab': self.tab,
-            'diff': diff,
-            'current': current,
-            'active_tab': 'compliance',
-        })
+        return render(
+            request,
+            self.template_name,
+            {
+                'object': backup,
+                'tab': self.tab,
+                'diff': diff,
+                'current': current,
+                'active_tab': 'compliance',
+            },
+        )
 
 
 @register_model_view(Backup, 'diff')
@@ -283,7 +326,9 @@ class DiffView(ObjectView):
 
     def post(self, request, backup, *args, **kwargs):
         if request.POST.get('_all') and self.filterset is not None:
-            queryset = self.filterset(request.GET, self.parent_model.objects.only('pk'), request=request).qs
+            queryset = self.filterset(
+                request.GET, self.parent_model.objects.only('pk'), request=request
+            ).qs
             pk_list = [obj.pk for obj in queryset]
         else:
             pk_list = [int(pk) for pk in request.POST.getlist('pk')]
@@ -300,37 +345,44 @@ class DiffView(ObjectView):
             current = None
             previous = None
 
-        return self.get(request=request, backup=backup, current=current, previous=previous)
+        return self.get(
+            request=request, backup=backup, current=current, previous=previous
+        )
 
     def get(self, request, backup, current=None, previous=None):
         backup = get_object_or_404(Backup.objects.all(), pk=backup)
         if current:
-            current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
+            current = get_object_or_404(
+                BackupCommitTreeChange.objects.all(), pk=current
+            )
         else:
-            current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
+            current = BackupCommitTreeChange.objects.filter(
+                backup=backup, file__isnull=False
+            ).last()
             if not current:
-                raise Http404(
-                    "No current commit available"
-                )
+                raise Http404("No current commit available")
         if previous:
-            previous = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=previous)
+            previous = get_object_or_404(
+                BackupCommitTreeChange.objects.all(), pk=previous
+            )
         else:
             previous = BackupCommitTreeChange.objects.filter(
                 backup=backup,
                 file__type=current.file.type,
-                commit__time__lt=current.commit.time
+                commit__time__lt=current.commit.time,
             ).last()
             if not previous:
-                raise Http404(
-                    "No Previous Commit"
-                )
+                raise Http404("No Previous Commit")
 
         repo = GitBackup()
 
         previous_sha = previous.commit.sha if previous.commit is not None else 'HEAD'
         current_sha = current.commit.sha if current.commit is not None else None
 
-        if backup.device and backup.device.platform.napalm.napalm_driver in ['ios', 'nxos']:
+        if backup.device and backup.device.platform.napalm.napalm_driver in [
+            'ios',
+            'nxos',
+        ]:
             new = repo.read(current.file.path, current_sha)
             old = repo.read(previous.file.path, previous_sha)
             differ = Differ(old, new)
@@ -344,14 +396,18 @@ class DiffView(ObjectView):
         for idx, line in enumerate(diff):
             diff[idx] = line.rstrip()
 
-        return render(request, 'netbox_config_backup/diff.html', {
-            'object': backup,
-            'tab': self.tab,
-            'diff': diff,
-            'current': current,
-            'previous': previous,
-            'active_tab': 'diff',
-        })
+        return render(
+            request,
+            'netbox_config_backup/diff.html',
+            {
+                'object': backup,
+                'tab': self.tab,
+                'diff': diff,
+                'current': current,
+                'previous': previous,
+                'active_tab': 'diff',
+            },
+        )
 
 
 @register_model_view(Device, name='backups')
@@ -362,19 +418,19 @@ class DeviceBackupsView(ObjectChildrenView):
     child_model = BackupCommitTreeChange
     table = BackupsTable
     filterset = BackupsFilterSet
-    actions = {
-        'config': {'view'},
-        'diff': {'view'},
-        'bulk_diff': {'view'}
-    }
+    actions = {'config': {'view'}, 'diff': {'view'}, 'bulk_diff': {'view'}}
     tab = ViewTab(
         label='Backups',
         weight=100,
-        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup__device=obj, file__isnull=False).count(),
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(
+            backup__device=obj, file__isnull=False
+        ).count(),
     )
 
     def get_children(self, request, parent):
-        return self.child_model.objects.filter(backup__device=parent, file__isnull=False)
+        return self.child_model.objects.filter(
+            backup__device=parent, file__isnull=False
+        )
 
     def get_extra_context(self, request, instance):
         return {

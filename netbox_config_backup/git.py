@@ -1,5 +1,4 @@
 import os
-import difflib
 from datetime import datetime
 from time import sleep
 
@@ -9,9 +8,7 @@ from pydriller import Git
 
 from netbox import settings
 
-__all__ = (
-    'repository'
-)
+__all__ = 'repository'
 
 from netbox_config_backup.helpers import get_repository_dir
 
@@ -63,12 +60,17 @@ class GitBackup:
                 sleep(1)
                 failures = failures + 1
                 if failures >= 10:
-                    raise Exception('Unable to acquire lock on repository in a timely manner')
-
+                    raise Exception(
+                        'Unable to acquire lock on repository in a timely manner'
+                    )
 
     def commit(self, message):
-        committer = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('committer', None)
-        author = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('author', None)
+        committer = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get(
+            'committer', None
+        )
+        author = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get(
+            'author', None
+        )
 
         if author is not None:
             author = author.encode('ascii')
@@ -78,16 +80,24 @@ class GitBackup:
         failures = 0
         while failures < 10:
             try:
-                commit = porcelain.commit(self.repository, message, committer=committer, author=author)
+                commit = porcelain.commit(
+                    self.repository, message, committer=committer, author=author
+                )
                 return commit.decode('ascii')
             except repo.InvalidUserIdentity:
-                committer = 'Your NetBox is misconfigured <netbox@localhost>'.encode('ascii')
-                author = 'Your NetBox is misconfigured <netbox@localhost>'.encode('ascii')
+                committer = 'Your NetBox is misconfigured <netbox@localhost>'.encode(
+                    'ascii'
+                )
+                author = 'Your NetBox is misconfigured <netbox@localhost>'.encode(
+                    'ascii'
+                )
             except FileExistsError:
                 sleep(1)
                 failures = failures + 1
                 if failures >= 10:
-                    raise Exception('Unable to acquire lock on repository in a timely manner')
+                    raise Exception(
+                        'Unable to acquire lock on repository in a timely manner'
+                    )
 
     def read(self, file, index=None):
         path = file.encode('ascii')
@@ -96,14 +106,16 @@ class GitBackup:
 
         try:
             tree = self.repository[index.encode('ascii')].tree
-            mode, sha = object_store.tree_lookup_path(self.repository.__getitem__, tree, path)
+            _, sha = object_store.tree_lookup_path(
+                self.repository.__getitem__, tree, path
+            )
             data = self.repository[sha].data.decode('ascii')
             return data
         except KeyError:
             return None
 
     def diff(self, file, a=None, b=None):
-        path = file.encode('ascii')
+        _ = file.encode('ascii')
         commits = [a, b]
         data = []
         for commit in commits:
@@ -116,8 +128,6 @@ class GitBackup:
         return diff
 
     def log(self, file=None, paths=[], index=None, depth=None):
-        def get_index(haystack, needle):
-            key = f'{needle.file}'
 
         if file is not None:
             path = file.encode('ascii')
@@ -131,51 +141,66 @@ class GitBackup:
         if index is not None:
             index = index.encode('ascii')
 
-        walker = self.repository.get_walker(include=index, paths=paths, max_entries=depth)
+        walker = self.repository.get_walker(
+            include=index, paths=paths, max_entries=depth
+        )
         entries = [entry for entry in walker]
 
         indexes = []
         for entry in entries:
-            output = {}
-            encoding = entry.commit.encoding.decode('ascii') if entry.commit.encoding else 'ascii'
-            parents = []
+            encoding = (
+                entry.commit.encoding.decode('ascii')
+                if entry.commit.encoding
+                else 'ascii'
+            )
             output = {
                 'author': decode(entry.commit.author, encoding),
                 'committer': decode(entry.commit.committer, encoding),
                 'message': decode(entry.commit.message, encoding),
-                'parents': [decode(parent, encoding) for parent in entry.commit.parents],
+                'parents': [
+                    decode(parent, encoding) for parent in entry.commit.parents
+                ],
                 'sha': str(entry.commit.sha().hexdigest()),
                 'time': datetime.fromtimestamp(entry.commit.commit_time),
-                'tree': decode(entry.commit.tree, encoding)
+                'tree': decode(entry.commit.tree, encoding),
             }
             changes = []
             for change in entry.changes():
-                old = {'sha': decode(change.old.sha, encoding), 'path': decode(change.old.path, encoding)}
-                if path is not None and (change.old.path == path or change.new.path == path):
-                    output.update({
-                        'change': {
-                            'type': change.type,
-                            'old': {
-                                'path': old.get('path'),
-                                'sha': old.get('sha'),
-                            },
-                            'new': {
-                                'path': decode(change.new.path, encoding),
-                                'sha': decode(change.new.sha, encoding)
-                            },
+                old = {
+                    'sha': decode(change.old.sha, encoding),
+                    'path': decode(change.old.path, encoding),
+                }
+                if path is not None and (
+                    change.old.path == path or change.new.path == path
+                ):
+                    output.update(
+                        {
+                            'change': {
+                                'type': change.type,
+                                'old': {
+                                    'path': old.get('path'),
+                                    'sha': old.get('sha'),
+                                },
+                                'new': {
+                                    'path': decode(change.new.path, encoding),
+                                    'sha': decode(change.new.sha, encoding),
+                                },
+                            }
                         }
-                    })
-                changes.append({
-                    'type': change.type,
-                    'old': {
-                        'path': decode(change.old.path, encoding),
-                        'sha': decode(change.old.sha, encoding)
-                    },
-                    'new': {
-                        'path': decode(change.new.path, encoding),
-                        'sha': decode(change.new.sha, encoding)
-                    },
-                })
+                    )
+                changes.append(
+                    {
+                        'type': change.type,
+                        'old': {
+                            'path': decode(change.old.path, encoding),
+                            'sha': decode(change.old.sha, encoding),
+                        },
+                        'new': {
+                            'path': decode(change.new.path, encoding),
+                            'sha': decode(change.new.sha, encoding),
+                        },
+                    }
+                )
 
             output.update({'changes': changes})
             indexes.append(output)

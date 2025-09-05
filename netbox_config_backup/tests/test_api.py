@@ -6,7 +6,6 @@ from utilities.testing import APIViewTestCases, APITestCase
 from netbox_config_backup.models import Backup
 
 
-
 class AppTest(APITestCase):
     def test_root(self):
         url = reverse("plugins-api:netbox_config_backup-api:api-root")
@@ -34,9 +33,7 @@ class BackupTest(APIViewTestCases.APIViewTestCase):
         },
     ]
 
-    bulk_update_data = {
-        'config_status': True
-    }
+    bulk_update_data = {'config_status': True}
 
     @classmethod
     def setUpTestData(cls):

@@ -1,6 +1,5 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from django.forms import CharField
 from django.utils.translation import gettext as _
 
 from core.choices import JobStatusChoices
@@ -9,8 +8,12 @@ from dcim.models import Device
 from ipam.models import IPAddress
 from netbox.forms import NetBoxModelForm, NetBoxModelBulkEditForm
 from netbox_config_backup.models import Backup, BackupJob
-from utilities.forms import add_blank_choice
-from utilities.forms.fields import DynamicModelChoiceField, DynamicModelMultipleChoiceField, CommentField
+from utilities.forms import add_blank_choice, BOOLEAN_WITH_BLANK_CHOICES
+from utilities.forms.fields import (
+    DynamicModelChoiceField,
+    DynamicModelMultipleChoiceField,
+    CommentField,
+)
 
 __all__ = (
     'BackupForm',
@@ -18,8 +21,6 @@ __all__ = (
     'BackupFilterSetForm',
     'BackupBulkEditForm',
 )
-
-from utilities.forms.rendering import FieldSet
 
 
 class BackupForm(NetBoxModelForm):
@@ -38,51 +39,57 @@ class BackupForm(NetBoxModelForm):
         required=False,
         queryset=IPAddress.objects.all(),
         help_text='This field requires the device to be set',
-        query_params={
-            'device_id': '$device',
-            'assigned_to_interface': True
-        },
+        query_params={'device_id': '$device', 'assigned_to_interface': True},
     )
     comments = CommentField()
 
     class Meta:
         model = Backup
-        fields = ('name', 'device', 'ip', 'status', 'description', 'comments', 'config_status')
+        fields = (
+            'name',
+            'device',
+            'ip',
+            'status',
+            'description',
+            'comments',
+            'config_status',
+        )
 
     def clean(self):
         super().clean()
         if self.cleaned_data.get('ip') and not self.cleaned_data.get('device'):
-            raise ValidationError({'ip': f'Device must be set'})
+            raise ValidationError({'ip': 'Device must be set'})
 
         if self.cleaned_data.get('device'):
             device = self.cleaned_data.get('device')
             if not device.platform:
                 raise ValidationError({'device': f'{device} has no platform set'})
             elif not hasattr(device.platform, 'napalm'):
-                raise ValidationError({'device': f'{device}\'s platform ({device.platform}) has no napalm driver'})
+                raise ValidationError(
+                    {
+                        'device': f'{device}\'s platform ({device.platform}) has no napalm driver'
+                    }
+                )
 
 
 class BackupJobFilterSetForm(forms.Form):
     model = BackupJob
     field_order = [
-        'q', 'status',
+        'q',
+        'status',
     ]
     status = forms.MultipleChoiceField(
-        required=False,
-        choices=add_blank_choice(JobStatusChoices),
-        label=_('Status')
+        required=False, choices=add_blank_choice(JobStatusChoices), label=_('Status')
     )
 
 
 class BackupFilterSetForm(forms.Form):
     model = Backup
-    field_order = [
-        'q', 'name', 'device_id', 'ip'
-    ]
+    field_order = ['q', 'name', 'device_id', 'ip']
     q = forms.CharField(
         required=False,
         widget=forms.TextInput(attrs={'placeholder': _('All Fields')}),
-        label=_('Search')
+        label=_('Search'),
     )
     device_id = DynamicModelMultipleChoiceField(
         queryset=Device.objects.all(),
@@ -101,16 +108,19 @@ class BackupFilterSetForm(forms.Form):
                 'placeholder': 'IP Address',
             }
         ),
-        label=_('IP Address')
+        label=_('IP Address'),
+    )
+    config_status = forms.NullBooleanField(
+        required=False,
+        label=_('Config Saved'),
+        widget=forms.Select(choices=BOOLEAN_WITH_BLANK_CHOICES),
     )
 
 
 class BackupBulkEditForm(NetBoxModelBulkEditForm):
 
     description = forms.CharField(
-        label=_('Description'),
-        max_length=200,
-        required=False
+        label=_('Description'), max_length=200, required=False
     )
     comments = CommentField()
 

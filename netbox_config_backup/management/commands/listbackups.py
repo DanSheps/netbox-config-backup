@@ -5,7 +5,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from netbox_config_backup.models import Backup
-        print(f'Backup Name\t\tDevice Name\t\tIP')
+
+        print('Backup Name\t\tDevice Name\t\tIP')
         for backup in Backup.objects.filter(device__isnull=False):
             if backup.ip:
                 ip = backup.ip

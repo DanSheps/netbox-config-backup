@@ -1,12 +1,6 @@
-from datetime import datetime
 from importlib.metadata import metadata
 
-from django.utils import timezone
-from django_rq import get_queue
-
-from core.choices import JobStatusChoices
 from netbox.plugins import PluginConfig
-from netbox_config_backup.utils.logger import get_logger
 
 metadata = metadata('netbox_config_backup')
 
@@ -19,7 +13,7 @@ class NetboxConfigBackup(PluginConfig):
     author = metadata.get('Author')
     author_email = metadata.get('Author-email')
     base_url = 'configbackup'
-    min_version = '4.1.0'
+    min_version = '4.4.0'
     required_settings = [
         'repository',
         'committer',
@@ -29,16 +23,15 @@ class NetboxConfigBackup(PluginConfig):
         # Frequency in seconds
         'frequency': 3600,
     }
-    queues = [
-        'jobs'
-    ]
+    queues = ['jobs']
     graphql_schema = 'graphql.schema.schema'
 
     def ready(self, *args, **kwargs):
         super().ready()
         import sys
+
         if len(sys.argv) > 1 and 'rqworker' in sys.argv[1]:
-            from netbox_config_backup.jobs.backup import BackupRunner
+            from netbox_config_backup.jobs.backup import BackupRunner  # noqa: F401
 
 
 config = NetboxConfigBackup
