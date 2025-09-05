@@ -5,13 +5,10 @@ from django.db.models import Q
 from django.utils.translation import gettext as _
 from netaddr import AddrFormatError
 
-from core.choices import JobStatusChoices
-from ipam.models import IPAddress
-from netbox.filtersets import NetBoxModelFilterSet, BaseFilterSet
+from netbox.filtersets import BaseFilterSet
 from dcim.models import Device
 from netbox_config_backup import models
 from netbox_config_backup.choices import FileTypeChoices
-from utilities.filters import MultiValueCharFilter
 
 
 class BackupJobFilterSet(BaseFilterSet):
@@ -24,6 +21,17 @@ class BackupJobFilterSet(BaseFilterSet):
         model = models.BackupJob
         fields = ['id', 'status']
 
+    def search(self, queryset, name, value):
+        if not value.strip():
+            return queryset
+        qs_filter = (
+            Q(backup__name__icontains=value)
+            | Q(backup__ip__address__icontains=value)
+            | Q(backup__device__name__icontains=value)
+        )
+
+        return queryset.filter(qs_filter)
+
 
 class BackupFilterSet(BaseFilterSet):
     q = django_filters.CharFilter(
@@ -34,12 +42,16 @@ class BackupFilterSet(BaseFilterSet):
         field_name='device__name',
         queryset=Device.objects.all(),
         to_field_name='name',
-        label='Device (name)',
+        label=_('Device (name)'),
     )
     device_id = django_filters.ModelMultipleChoiceFilter(
         field_name='device',
         queryset=Device.objects.all(),
-        label='Device (ID)',
+        label=_('Device (ID)'),
+    )
+    config_status = django_filters.BooleanFilter(
+        field_name='config_status',
+        label=_('Config Saved'),
     )
     ip = django_filters.CharFilter(
         method='filter_address',
@@ -54,11 +66,11 @@ class BackupFilterSet(BaseFilterSet):
         if not value.strip():
             return queryset
         qs_filter = (
-            Q(name__icontains=value) |
-            Q(device__name__icontains=value) |
-            Q(device__primary_ip4__address__contains=value.strip()) |
-            Q(device__primary_ip6__address__contains=value.strip()) |
-            Q(ip__address__contains=value.strip())
+            Q(name__icontains=value)
+            | Q(device__name__icontains=value)
+            | Q(device__primary_ip4__address__contains=value.strip())
+            | Q(device__primary_ip6__address__contains=value.strip())
+            | Q(ip__address__contains=value.strip())
         )
 
         try:
@@ -81,7 +93,7 @@ class BackupFilterSet(BaseFilterSet):
                 return queryset.filter(query)
             else:
                 return queryset.filter(ip__address__net_host_contained=value)
-        except ValidationError as e:
+        except ValidationError:
             return queryset.none()
 
 
@@ -91,9 +103,7 @@ class BackupsFilterSet(BaseFilterSet):
         label=_('Search'),
     )
     type = django_filters.MultipleChoiceFilter(
-        field_name='file__type',
-        choices=FileTypeChoices,
-        null_value=None
+        field_name='file__type', choices=FileTypeChoices, null_value=None
     )
 
     class Meta:
@@ -103,8 +113,5 @@ class BackupsFilterSet(BaseFilterSet):
     def search(self, queryset, name, value):
         if not value.strip():
             return queryset
-        qs_filter = (
-            Q(file__type=value) |
-            Q(file__type__startswith=value)
-        )
+        qs_filter = Q(file__type=value) | Q(file__type__startswith=value)
         return queryset.filter(qs_filter)

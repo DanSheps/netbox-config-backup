@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 
+from core.choices import JobStatusChoices
 from netbox_config_backup.jobs.backup import BackupRunner
 from netbox_config_backup.models import Backup
 
@@ -19,9 +20,17 @@ class Command(BaseCommand):
             if not backup:
                 backup = Backup.objects.filter(name=options['device']).first()
             if backup:
+                if options.get('time') == 'now':
+                    for job in backup.jobs.filter(
+                        status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES
+                    ):
+                        print(f'Clearing old jobs: {job}')
+                        job.status = JobStatusChoices.STATUS_ERRORED
+                        job.clean()
+                        job.save()
+
                 self.run_backup(backup)
             else:
                 raise Exception('Device not found')
         else:
             self.run_backup()
-

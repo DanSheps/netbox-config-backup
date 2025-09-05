@@ -2,11 +2,9 @@ from django.test import TestCase
 
 from dcim.models import Site, Manufacturer, DeviceType, DeviceRole, Device
 from ipam.models import IPAddress
-from utilities.testing import ChangeLoggedFilterSetTests
 
 from netbox_config_backup.filtersets import BackupFilterSet
 from netbox_config_backup.models import Backup
-
 
 
 class BackupTestCase(TestCase):
@@ -16,17 +14,15 @@ class BackupTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         site = Site.objects.create(name='Site 1', slug='site-1')
-        manufacturer = Manufacturer.objects.create(name='Manufacturer 1', slug='manufacturer-1')
+        manufacturer = Manufacturer.objects.create(
+            name='Manufacturer 1', slug='manufacturer-1'
+        )
         device_type = DeviceType.objects.create(
             manufacturer=manufacturer, model='Device Type 1', slug='device-type-1'
         )
-        role = DeviceRole.objects.create(
-            name='Device Role 1', slug='device-role-1'
-        )
+        role = DeviceRole.objects.create(name='Device Role 1', slug='device-role-1')
 
-        ip = IPAddress.objects.create(
-            address='10.10.10.10/24'
-        )
+        ip = IPAddress.objects.create(address='10.10.10.10/24')
 
         devices = (
             Device(name='Device 1', device_type=device_type, role=role, site=site),

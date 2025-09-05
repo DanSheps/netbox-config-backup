@@ -1,19 +1,17 @@
-from dcim.models import Device
-from extras.models import Tag
-from utilities.testing import ViewTestCases, create_tags, create_test_device
+from utilities.testing import ViewTestCases, create_test_device
 
 from netbox_config_backup.models import Backup
 
 
 class BackupTestCase(
-        ViewTestCases.GetObjectViewTestCase,
-        ViewTestCases.GetObjectChangelogViewTestCase,
-        ViewTestCases.CreateObjectViewTestCase,
-        ViewTestCases.EditObjectViewTestCase,
-        ViewTestCases.DeleteObjectViewTestCase,
-        ViewTestCases.ListObjectsViewTestCase,
-        ViewTestCases.BulkEditObjectsViewTestCase,
-        ViewTestCases.BulkDeleteObjectsViewTestCase
+    ViewTestCases.GetObjectViewTestCase,
+    ViewTestCases.GetObjectChangelogViewTestCase,
+    ViewTestCases.CreateObjectViewTestCase,
+    ViewTestCases.EditObjectViewTestCase,
+    ViewTestCases.DeleteObjectViewTestCase,
+    ViewTestCases.ListObjectsViewTestCase,
+    ViewTestCases.BulkEditObjectsViewTestCase,
+    ViewTestCases.BulkDeleteObjectsViewTestCase,
 ):
     # ViewTestCases.BulkImportObjectsViewTestCase,
     model = Backup
@@ -34,10 +32,7 @@ class BackupTestCase(
         )
         Backup.objects.bulk_create(backups)
 
-        cls.form_data = {
-            'name': 'Backup X',
-            'status': 'disabled'
-        }
+        cls.form_data = {'name': 'Backup X', 'status': 'disabled'}
 
         cls.bulk_edit_data = {
             'description': 'A description',

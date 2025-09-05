@@ -1,0 +1,2 @@
+class JobExit(Exception):
+    pass

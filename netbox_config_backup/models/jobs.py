@@ -2,7 +2,6 @@ import logging
 
 from django.db import models
 from django.db.models import ForeignKey
-from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
@@ -11,9 +10,9 @@ from django_rq import get_queue
 from core.choices import JobStatusChoices
 from netbox.models import NetBoxModel
 from utilities.querysets import RestrictedQuerySet
-from .abstract import BigIDModel
 
-logger = logging.getLogger(f"netbox_config_backup")
+
+logger = logging.getLogger("netbox_config_backup")
 
 
 class BackupJob(NetBoxModel):
@@ -23,7 +22,7 @@ class BackupJob(NetBoxModel):
         on_delete=models.SET_NULL,
         related_name='backup_job',
         null=True,
-        blank=True
+        blank=True,
     )
     backup = ForeignKey(
         to='Backup',
@@ -37,35 +36,20 @@ class BackupJob(NetBoxModel):
         null=True,
         blank=True,
     )
-    created = models.DateTimeField(
-        auto_now_add=True
-    )
-    scheduled = models.DateTimeField(
-        null=True,
-        blank=True
-    )
-    started = models.DateTimeField(
-        null=True,
-        blank=True
-    )
-    completed = models.DateTimeField(
-        null=True,
-        blank=True
-    )
+    created = models.DateTimeField(auto_now_add=True)
+    scheduled = models.DateTimeField(null=True, blank=True)
+    started = models.DateTimeField(null=True, blank=True)
+    completed = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
-        max_length=30,
-        choices=JobStatusChoices,
-        default=JobStatusChoices.STATUS_PENDING
+        max_length=30, choices=JobStatusChoices, default=JobStatusChoices.STATUS_PENDING
     )
-    data = models.JSONField(
-        null=True,
-        blank=True
-    )
-    job_id = models.UUIDField(
-        unique=True
-    )
+    data = models.JSONField(null=True, blank=True)
+    job_id = models.UUIDField(unique=True)
 
     objects = RestrictedQuerySet.as_manager()
+
+    class Meta:
+        ordering = ('pk',)
 
     def __str__(self):
         return str(self.job_id)

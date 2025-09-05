@@ -5,6 +5,7 @@ from utilities.choices import ChoiceSet
 # File Types for Backup Files
 #
 
+
 class FileTypeChoices(ChoiceSet):
 
     TYPE_RUNNING = 'running'
@@ -14,6 +15,7 @@ class FileTypeChoices(ChoiceSet):
         (TYPE_RUNNING, 'Running'),
         (TYPE_STARTUP, 'Startup'),
     )
+
 
 class CommitTreeChangeTypeChoices(ChoiceSet):
 

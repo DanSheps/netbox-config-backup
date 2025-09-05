@@ -1,9 +1,7 @@
-import difflib
-import re
 import logging
 from deepdiff import DeepDiff
 
-logger = logging.getLogger(f"netbox_config_backup")
+logger = logging.getLogger("netbox_config_backup")
 
 
 class Differ(DeepDiff):

@@ -9,21 +9,23 @@ from netbox_config_backup.forms import *
 from netbox_config_backup.models import *
 
 
-
 class BackupTestCase(TestCase):
 
     @classmethod
     def setUpTestData(cls):
         platform = Platform.objects.create(name='Cisco IOS', slug='cisco-ios')
-        device = create_test_device(name='Device 1', platform=platform)
-        NapalmPlatformConfig.objects.create(platform=platform, napalm_driver='cisco_ios')
+        device = create_test_device(name='Device 1', platform=platform)  # noqa: F841
+        NapalmPlatformConfig.objects.create(
+            platform=platform, napalm_driver='cisco_ios'
+        )
 
     def test_backup(self):
-        form = BackupForm(data={
-            'name': 'New Backup',
-            'device': Device.objects.first().pk,
-            'status': 'disabled'
-        })
-        print(form.errors)
+        form = BackupForm(
+            data={
+                'name': 'New Backup',
+                'device': Device.objects.first().pk,
+                'status': 'disabled',
+            }
+        )
         self.assertTrue(form.is_valid())
         self.assertTrue(form.save())
