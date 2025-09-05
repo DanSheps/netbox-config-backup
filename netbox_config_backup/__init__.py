@@ -31,7 +31,7 @@ class NetboxConfigBackup(PluginConfig):
         import sys
 
         if len(sys.argv) > 1 and 'rqworker' in sys.argv[1]:
-            from netbox_config_backup.jobs.backup import BackupRunner  # noqa: F401
+            from netbox_config_backup.jobs import BackupRunner, BackupHousekeeping  # noqa: F401
 
 
 config = NetboxConfigBackup

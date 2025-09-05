@@ -10,4 +10,5 @@ repos:
   hooks:
     - id: black
       name: "Black"
+      args: [--check]
 
