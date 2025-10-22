@@ -35,9 +35,7 @@ class BackupFile(BigIDModel):
         blank=False,
         related_name='files',
     )
-    type = models.CharField(
-        max_length=10, choices=FileTypeChoices, null=False, blank=False
-    )
+    type = models.CharField(max_length=10, choices=FileTypeChoices, null=False, blank=False)
 
     last_change = models.DateTimeField(null=True, blank=True)
 
@@ -73,16 +71,10 @@ class BackupCommitTreeChange(BigIDModel):
         related_name='changes',
     )
 
-    commit = models.ForeignKey(
-        to=BackupCommit, on_delete=models.PROTECT, related_name='changes'
-    )
+    commit = models.ForeignKey(to=BackupCommit, on_delete=models.PROTECT, related_name='changes')
     type = models.CharField(max_length=10)
-    old = models.ForeignKey(
-        to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True
-    )
-    new = models.ForeignKey(
-        to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True
-    )
+    old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True)
+    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True)
 
     class Meta:
         ordering = ('pk',)
@@ -96,11 +88,9 @@ class BackupCommitTreeChange(BigIDModel):
     def get_absolute_url(self):
         return reverse(
             'plugins:netbox_config_backup:backup_config',
-            kwargs={'backup': self.backup.pk, 'current': self.pk},
+            kwargs={'pk': self.backup.pk, 'current': self.pk},
         )
 
     @property
     def previous(self):
-        return self.backup.changes.filter(
-            file__type=self.file.type, commit__time__lt=self.commit.time
-        ).last()
+        return self.backup.changes.filter(file__type=self.file.type, commit__time__lt=self.commit.time).last()

@@ -8,21 +8,20 @@ from netbox.tables import columns, BaseTable, NetBoxTable
 class ActionButtonsColumn(tables.TemplateColumn):
     attrs = {'td': {'class': 'text-end text-nowrap noprint min-width'}}
     template_code = """
-    <a href="{% url 'plugins:netbox_config_backup:backup_compliance' backup=record.backup.pk current=record.pk %}"
+    <a href="{% url 'plugins:netbox_config_backup:backup_compliance' pk=record.backup.pk current=record.pk %}"
       class="btn btn-sm btn-outline-dark" title="View">
         <i class="mdi mdi-check-all"></i>
     </a>
-    <a href="{% url 'plugins:netbox_config_backup:backup_config' backup=record.backup.pk current=record.pk %}"
+    <a href="{% url 'plugins:netbox_config_backup:backup_config' pk=record.backup.pk current=record.pk %}"
       class="btn btn-sm btn-outline-dark" title="View">
         <i class="mdi mdi-cloud-download"></i>
     </a>
     {% if record.previous %}
-        <a href="{% url 'plugins:netbox_config_backup:backup_diff' backup=record.backup.pk current=record.pk
-        previous=record.previous.pk %}" class="btn btn-outline-dark btn-sm" title="Diff">
+        <a href="{% url 'plugins:netbox_config_backup:backup_diff' pk=record.backup.pk current=record.pk previous=record.previous.pk %}" class="btn btn-outline-dark btn-sm" title="Diff">
             <i class="mdi mdi-file-compare"></i>
         </a>
     {% endif %}
-    """  # noqa: F501
+    """  # noqa: E501
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, template_code=self.template_code, **kwargs)
@@ -108,16 +107,14 @@ class BackupTable(BaseTable):
 
 
 class BackupsTable(NetBoxTable):
-    pk = columns.ToggleColumn(visible=True)
+    files = columns.ToggleColumn(accessor='pk', visible=True)
     date = tables.Column(accessor='commit__time')
     type = tables.Column(accessor='file__type')
     actions = ActionButtonsColumn()
 
-    class Meta:
+    class Meta(NetBoxTable.Meta):
         model = BackupCommitTreeChange
-        fields = ('pk', 'id', 'date', 'type', 'backup', 'commit', 'file', 'actions')
-        default_columns = ('pk', 'id', 'date', 'type', 'actions')
-        attrs = {
-            # 'class': 'table table-hover object-list',
-        }
+        fields = ('files', 'id', 'date', 'type', 'backup', 'commit', 'file', 'actions')
+        default_columns = ('files', 'id', 'date', 'type', 'actions')
+        exclude = ('pk',)
         order_by = ['-date']

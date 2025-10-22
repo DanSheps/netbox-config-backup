@@ -25,7 +25,7 @@
         {% with diff_view=backup|viewname:"diff" %}
 
                 <button type="submit" name="_diff"
-                        formaction="{% url diff_view backup=backup.pk %}?return_url={{ return_url }}"
+                        formaction="{% url diff_view pk=backup.pk %}?return_url={{ return_url }}"
                         class="btn btn-warning btn-sm">
                     <i class="mdi mdi-file-compare" aria-hidden="true"></i> Diff Selected (Max 2)
                 </button>
