@@ -60,17 +60,11 @@ class GitBackup:
                 sleep(1)
                 failures = failures + 1
                 if failures >= 10:
-                    raise Exception(
-                        'Unable to acquire lock on repository in a timely manner'
-                    )
+                    raise Exception('Unable to acquire lock on repository in a timely manner')
 
     def commit(self, message):
-        committer = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get(
-            'committer', None
-        )
-        author = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get(
-            'author', None
-        )
+        committer = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('committer', None)
+        author = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('author', None)
 
         if author is not None:
             author = author.encode('ascii')
@@ -80,24 +74,16 @@ class GitBackup:
         failures = 0
         while failures < 10:
             try:
-                commit = porcelain.commit(
-                    self.repository, message, committer=committer, author=author
-                )
+                commit = porcelain.commit(self.repository, message, committer=committer, author=author)
                 return commit.decode('ascii')
             except repo.InvalidUserIdentity:
-                committer = 'Your NetBox is misconfigured <netbox@localhost>'.encode(
-                    'ascii'
-                )
-                author = 'Your NetBox is misconfigured <netbox@localhost>'.encode(
-                    'ascii'
-                )
+                committer = 'Your NetBox is misconfigured <netbox@localhost>'.encode('ascii')
+                author = 'Your NetBox is misconfigured <netbox@localhost>'.encode('ascii')
             except FileExistsError:
                 sleep(1)
                 failures = failures + 1
                 if failures >= 10:
-                    raise Exception(
-                        'Unable to acquire lock on repository in a timely manner'
-                    )
+                    raise Exception('Unable to acquire lock on repository in a timely manner')
 
     def read(self, file, index=None):
         path = file.encode('ascii')
@@ -106,9 +92,7 @@ class GitBackup:
 
         try:
             tree = self.repository[index.encode('ascii')].tree
-            _, sha = object_store.tree_lookup_path(
-                self.repository.__getitem__, tree, path
-            )
+            _, sha = object_store.tree_lookup_path(self.repository.__getitem__, tree, path)
             data = self.repository[sha].data.decode('ascii')
             return data
         except KeyError:
@@ -141,25 +125,17 @@ class GitBackup:
         if index is not None:
             index = index.encode('ascii')
 
-        walker = self.repository.get_walker(
-            include=index, paths=paths, max_entries=depth
-        )
+        walker = self.repository.get_walker(include=index, paths=paths, max_entries=depth)
         entries = [entry for entry in walker]
 
         indexes = []
         for entry in entries:
-            encoding = (
-                entry.commit.encoding.decode('ascii')
-                if entry.commit.encoding
-                else 'ascii'
-            )
+            encoding = entry.commit.encoding.decode('ascii') if entry.commit.encoding else 'ascii'
             output = {
                 'author': decode(entry.commit.author, encoding),
                 'committer': decode(entry.commit.committer, encoding),
                 'message': decode(entry.commit.message, encoding),
-                'parents': [
-                    decode(parent, encoding) for parent in entry.commit.parents
-                ],
+                'parents': [decode(parent, encoding) for parent in entry.commit.parents],
                 'sha': str(entry.commit.sha().hexdigest()),
                 'time': datetime.fromtimestamp(entry.commit.commit_time),
                 'tree': decode(entry.commit.tree, encoding),
@@ -167,12 +143,10 @@ class GitBackup:
             changes = []
             for change in entry.changes():
                 old = {
-                    'sha': decode(change.old.sha, encoding),
-                    'path': decode(change.old.path, encoding),
+                    'sha': decode(getattr(change.old, 'sha', None), encoding),
+                    'path': decode(getattr(change.old, 'path', None), encoding),
                 }
-                if path is not None and (
-                    change.old.path == path or change.new.path == path
-                ):
+                if path is not None and (old.get('path') == path or change.get('new') == path):
                     output.update(
                         {
                             'change': {
@@ -182,8 +156,8 @@ class GitBackup:
                                     'sha': old.get('sha'),
                                 },
                                 'new': {
-                                    'path': decode(change.new.path, encoding),
-                                    'sha': decode(change.new.sha, encoding),
+                                    'path': decode(getattr(change.new, 'path', None), encoding),
+                                    'sha': decode(getattr(change.new, 'sha', None), encoding),
                                 },
                             }
                         }
@@ -192,12 +166,12 @@ class GitBackup:
                     {
                         'type': change.type,
                         'old': {
-                            'path': decode(change.old.path, encoding),
-                            'sha': decode(change.old.sha, encoding),
+                            'path': decode(getattr(change.old, 'path', None), encoding),
+                            'sha': decode(getattr(change.old, 'sha', None), encoding),
                         },
                         'new': {
-                            'path': decode(change.new.path, encoding),
-                            'sha': decode(change.new.sha, encoding),
+                            'path': decode(getattr(change.new, 'path', None), encoding),
+                            'sha': decode(getattr(change.new, 'sha', None), encoding),
                         },
                     }
                 )
