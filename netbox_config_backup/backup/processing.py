@@ -65,21 +65,18 @@ def run_backup(job_id):
             raise e
 
         if ip:
-            logger.debug(
-                f'Trying to connect to device {backup.device} with ip {ip} for {job}'
-            )
+            logger.debug(f'Trying to connect to device {backup.device} with ip {ip} for {job}')
             try:
                 d = napalm_init(backup.device, ip)
             except (TimeoutError, ServiceUnavailable):
                 job.status = JobStatusChoices.STATUS_FAILED
-                job.data = {
-                    'error': f'Timeout Connecting to {backup.device} with ip {ip}'
-                }
+                job.data = {'error': f'Timeout Connecting to {backup.device} with ip {ip}'}
                 logger.debug(f'Timeout Connecting to {backup.device} with ip {ip}')
                 job.save()
                 return
             logger.debug(f'Connected to {backup.device} with ip {ip} for {job}')
             job.status = JobStatusChoices.STATUS_RUNNING
+            job.pid = pid
             job.started = timezone.now()
             job.save()
             try:
@@ -118,16 +115,12 @@ def run_backup(job_id):
             configs = d.get_config()
             logger.debug(f'Committing config for {backup}')
             commit = backup.set_config(configs)
-            logger.debug(
-                f'Committed config for {backup} with {commit}; closing connection for {backup}'
-            )
+            logger.debug(f'Committed config for {backup} with {commit}; closing connection for {backup}')
             d.close()
 
             logger.debug(f'Scheduling next backup for {backup}')
             frequency = timedelta(
-                seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get(
-                    'frequency', 3600
-                )
+                seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency', 3600)
             )
             new = BackupJob(
                 runner=None,
@@ -140,10 +133,14 @@ def run_backup(job_id):
             new.full_clean()
             new.save()
 
-            logger.info(f'{backup}: Backup complete')
+            logger.info(f'{backup}: Next scheduled')
+
             job.status = JobStatusChoices.STATUS_COMPLETED
             job.completed = timezone.now()
+            job.full_clean()
             job.save()
+
+            logger.info(f'{backup}: Backup complete')
             remove_stale_backupjobs(job=job)
         else:
             logger.debug(f'{backup}: No IP set')
