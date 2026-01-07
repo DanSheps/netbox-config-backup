@@ -1,8 +1,9 @@
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from core.choices import JobStatusChoices
 from netbox_config_backup.jobs.backup import BackupRunner
-from netbox_config_backup.models import Backup
+from netbox_config_backup.models import Backup, BackupJob
 
 
 class Command(BaseCommand):
@@ -21,11 +22,14 @@ class Command(BaseCommand):
                 backup = Backup.objects.filter(name=options['device']).first()
             if backup:
                 if options.get('time') == 'now':
-                    for job in backup.jobs.filter(
-                        status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES
-                    ):
+                    for job in backup.jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES):
                         print(f'Clearing old jobs: {job}')
                         job.status = JobStatusChoices.STATUS_ERRORED
+                        job.data = (
+                            {'error': 'Clearing stuck job'}
+                            if not job.data
+                            else job.data.update({'error': 'Clearing stuck job'})
+                        )
                         job.clean()
                         job.save()
 
@@ -33,4 +37,11 @@ class Command(BaseCommand):
             else:
                 raise Exception('Device not found')
         else:
+            if options['time'] == 'now':
+                print('Setting all scheduled jobs to start immediately')
+                jobs = BackupJob.objects.filter(status=JobStatusChoices.STATUS_SCHEDULED)
+                for job in jobs:
+                    job.scheduled = timezone.now()
+                BackupJob.objects.bulk_update(jobs, ['scheduled'])
+
             self.run_backup()
