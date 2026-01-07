@@ -15,7 +15,7 @@ maintainers = [
 ]
 description = "A NetBox Switch Configuration Backup Plugin"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 keywords = ["netbox-plugin", ]
 version = "2.2.0"
 license = {file = "LICENSE"}
