@@ -5,7 +5,7 @@ jobs = PluginMenuItem(
     link='plugins:netbox_config_backup:backupjob_list',
     link_text='Jobs',
     permissions=['netbox_config_backup.view_backups'],
-    buttons=[]
+    buttons=[],
 )
 
 assigned = PluginMenuItem(
@@ -19,20 +19,20 @@ assigned = PluginMenuItem(
             icon_class="mdi mdi-plus",
             color=ButtonColorChoices.GREEN,
         ),
-    ]
+    ],
 )
 
 unassigned = PluginMenuItem(
-    link='plugins:netbox_config_backup:unassignedbackup_list',
+    link='plugins:netbox_config_backup:backup_unassigned_list',
     link_text='Unassigned Backups',
     permissions=['netbox_config_backup.view_backups'],
-    buttons=[]
+    buttons=[],
 )
 
 menu = PluginMenu(
     label="Configuration Backup",
     groups=(
-        ('Backup Jobs', (jobs, )),
+        ('Backup Jobs', (jobs,)),
         ('Backups', (assigned, unassigned)),
-    )
+    ),
 )

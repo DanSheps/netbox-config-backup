@@ -91,10 +91,12 @@ class BackupRunner(JobRunner):
                 jobs = BackupJob.objects.filter(backup=backup)
                 if jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES).count() == 0:
                     logger.debug(f'Queuing device {backup.device} for backup')
-                    if jobs.last().scheduled + frequency < timezone.now():
+                    if jobs.last() is not None and jobs.last().scheduled + frequency < timezone.now():
                         scheduled = timezone.now()
-                    else:
+                    elif jobs.last() is not None:
                         scheduled = jobs.last().scheduled + frequency
+                    else:
+                        scheduled = timezone.now()
                     job = BackupJob(
                         runner=None,
                         backup=backup,

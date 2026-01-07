@@ -1,15 +1,17 @@
 import logging
 
+import uuid
 from django.contrib import messages
 from django.http import Http404
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse, NoReverseMatch
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from jinja2 import TemplateError
 
 from core.choices import JobStatusChoices
 from dcim.models import Device
-from netbox.object_actions import ObjectAction
+from netbox.object_actions import AddObject, BulkEdit, BulkDelete
 from netbox.views.generic import (
     ObjectDeleteView,
     ObjectEditView,
@@ -19,6 +21,8 @@ from netbox.views.generic import (
     BulkEditView,
     BulkDeleteView,
 )
+from netbox.views.generic.base import BaseMultiObjectView
+from netbox_config_backup.backup.processing import run_backup
 from netbox_config_backup.filtersets import (
     BackupFilterSet,
     BackupsFilterSet,
@@ -33,65 +37,50 @@ from netbox_config_backup.forms import (
 )
 from netbox_config_backup.git import GitBackup
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange
+from netbox_config_backup.object_actions import *
 from netbox_config_backup.tables import BackupTable, BackupsTable, BackupJobTable
 from netbox_config_backup.utils import Differ
+from utilities.permissions import get_permission_for_model
 from utilities.views import register_model_view, ViewTab
 
 logger = logging.getLogger("netbox_config_backup")
 
 
-class ViewConfigAction(ObjectAction):
-    name = 'config'
-    label = _('Config')
-    permissions_required = {'view'}
-    template_name = 'netbox_config_backup/buttons/config.html'
-
-
-class DiffAction(ObjectAction):
-    name = 'diff'
-    label = _('Diff')
-    permissions_required = {'view'}
-    template_name = 'netbox_config_backup/buttons/diff.html'
-
-
-class BulkDiffAction(ObjectAction):
-    name = 'bulk_diff'
-    label = _('Bulk Diff')
-    permissions_required = {'view'}
-    template_name = 'netbox_config_backup/buttons/diff.html'
-
-
+@register_model_view(BackupJob, name='list', path='', detail=False)
 class BackupJobListView(ObjectListView):
     queryset = BackupJob.objects.all()
 
     filterset = BackupJobFilterSet
     filterset_form = BackupJobFilterSetForm
     table = BackupJobTable
-    action_buttons = ()
+    actions = ()
 
 
+@register_model_view(Backup, name='list', path='', detail=False)
 class BackupListView(ObjectListView):
     queryset = Backup.objects.filter(device__isnull=False).default_annotate()
 
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
     table = BackupTable
-    action_buttons = ('add',)
+    actions = (AddObject, BulkEdit, BulkDelete)
 
 
+@register_model_view(Backup, name='unassigned_list', path='unassigned', detail=False)
 class UnassignedBackupListView(ObjectListView):
     queryset = Backup.objects.filter(device__isnull=True).default_annotate()
 
     filterset = BackupFilterSet
     filterset_form = BackupFilterSetForm
     table = BackupTable
-    action_buttons = ()
+    actions = (AddObject, BulkEdit, BulkDelete)
 
 
 @register_model_view(Backup)
 class BackupView(ObjectView):
     queryset = Backup.objects.all().default_annotate()
     template_name = 'netbox_config_backup/backup.html'
+    actions = ObjectView.actions + (RunBackupsNowAction,)
 
     def get_extra_context(self, request, instance):
 
@@ -126,7 +115,7 @@ class BackupBackupsView(ObjectChildrenView):
     child_model = BackupCommitTreeChange
     table = BackupsTable
     filterset = BackupsFilterSet
-    # actions =  (ViewConfigAction, DiffAction, BulkDiffAction)
+    actions = ObjectChildrenView.actions + (ViewConfigAction, DiffAction, BulkDiffAction, BulkConfigAction)
     tab = ViewTab(
         label='View Backups',
         badge=lambda obj: BackupCommitTreeChange.objects.filter(backup=obj, file__isnull=False).count(),
@@ -143,6 +132,7 @@ class BackupBackupsView(ObjectChildrenView):
         }
 
 
+@register_model_view(Backup, 'add', detail=False)
 @register_model_view(Backup, 'edit')
 class BackupEditView(ObjectEditView):
     queryset = Backup.objects.all()
@@ -181,7 +171,39 @@ class BackupDeleteView(ObjectDeleteView):
         return reverse('home')
 
 
-@register_model_view(Backup, 'bulk_edit')
+@register_model_view(Backup, 'run')
+class BackupNowView(BaseMultiObjectView):
+    queryset = Backup.objects.all()
+    template_name = None
+
+    def run_backup(self, backup):
+        job = BackupJob(
+            runner=None,
+            backup=backup,
+            status=JobStatusChoices.STATUS_SCHEDULED,
+            scheduled=timezone.now(),
+            job_id=uuid.uuid4(),
+            data={},
+        )
+        job.full_clean()
+        job.save()
+        run_backup(job.id)
+
+    def get_required_permission(self):
+        return get_permission_for_model(self.queryset.model, 'view')
+
+    def get(self, request, pk):
+        backup = get_object_or_404(Backup, pk=self.kwargs['pk'])
+        self.run_backup(backup)
+        return redirect(backup.get_absolute_url())
+
+    def post(self, request, pk):
+        backup = get_object_or_404(Backup, pk=self.kwargs['pk'])
+        self.run_backup(backup)
+        return redirect(backup.get_absolute_url())
+
+
+@register_model_view(Backup, name='bulk_edit', path='edit', detail=False)
 class BackupBulkEditView(BulkEditView):
     queryset = Backup.objects.all()
     form = BackupBulkEditForm
@@ -189,30 +211,31 @@ class BackupBulkEditView(BulkEditView):
     table = BackupTable
 
 
-@register_model_view(Backup, 'bulk_delete')
+@register_model_view(Backup, name='bulk_delete', path='delete', detail=False)
 class BackupBulkDeleteView(BulkDeleteView):
     queryset = Backup.objects.all()
     filterset = BackupFilterSet
     table = BackupTable
 
 
-@register_model_view(Backup, 'config')
+@register_model_view(Backup, name='config', path='config/<int:current>')
 class ConfigView(ObjectView):
     queryset = Backup.objects.all()
     template_name = 'netbox_config_backup/config.html'
     tab = ViewTab(
         label='Configuration',
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup=obj, file__isnull=False).count(),
+        permission='netbox_config_backup.view_backup',
     )
 
-    def get(self, request, backup, current=None):
-        backup = get_object_or_404(Backup.objects.all(), pk=backup)
+    def get(self, request, pk, current=None):
+        backup = get_object_or_404(Backup.objects.all(), pk=pk)
         if current:
             current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
         else:
             current = BackupCommitTreeChange.objects.filter(backup=backup, file__isnull=False).last()
             if not current:
                 raise Http404("No current commit available")
-
         path = f'{current.file.path}'
 
         repo = GitBackup()
@@ -225,7 +248,7 @@ class ConfigView(ObjectView):
         return render(
             request,
             'netbox_config_backup/config.html',
-            {
+            context={
                 'object': backup,
                 'tab': self.tab,
                 'backup_config': config,
@@ -236,7 +259,7 @@ class ConfigView(ObjectView):
         )
 
 
-@register_model_view(Backup, 'compliance')
+@register_model_view(Backup, name='compliance', path='compliance/<int:current>')
 class ComplianceView(ObjectView):
     queryset = Backup.objects.all()
     template_name = 'netbox_config_backup/compliance.html'
@@ -286,8 +309,8 @@ class ComplianceView(ObjectView):
             diff[idx] = line.rstrip()
         return diff
 
-    def get(self, request, backup, current=None, previous=None):
-        backup = get_object_or_404(Backup.objects.all(), pk=backup)
+    def get(self, request, pk, current=None, previous=None):
+        backup = get_object_or_404(Backup.objects.all(), pk=pk)
 
         diff = [
             'No rendered configuration',
@@ -302,7 +325,7 @@ class ComplianceView(ObjectView):
         return render(
             request,
             self.template_name,
-            {
+            context={
                 'object': backup,
                 'tab': self.tab,
                 'diff': diff,
@@ -312,15 +335,17 @@ class ComplianceView(ObjectView):
         )
 
 
-@register_model_view(Backup, 'diff')
+@register_model_view(Backup, name='diff', path='diff/<int:current>/<int:previous>')
 class DiffView(ObjectView):
     queryset = Backup.objects.all()
     template_name = 'netbox_config_backup/diff.html'
     tab = ViewTab(
         label='Diff',
+        badge=lambda obj: BackupCommitTreeChange.objects.filter(backup=obj, file__isnull=False).count(),
+        permission='netbox_config_backup.view_backup',
     )
 
-    def post(self, request, backup, *args, **kwargs):
+    def post(self, request, pk, *args, **kwargs):
         if request.POST.get('_all') and self.filterset is not None:
             queryset = self.filterset(request.GET, self.parent_model.objects.only('pk'), request=request).qs
             pk_list = [obj.pk for obj in queryset]
@@ -339,10 +364,10 @@ class DiffView(ObjectView):
             current = None
             previous = None
 
-        return self.get(request=request, backup=backup, current=current, previous=previous)
+        return self.get(request=request, pk=pk, current=current, previous=previous)
 
-    def get(self, request, backup, current=None, previous=None):
-        backup = get_object_or_404(Backup.objects.all(), pk=backup)
+    def get(self, request, pk, current=None, previous=None):
+        backup = get_object_or_404(Backup.objects.all(), pk=pk)
         if current:
             current = get_object_or_404(BackupCommitTreeChange.objects.all(), pk=current)
         else:
