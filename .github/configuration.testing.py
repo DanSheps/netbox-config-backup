@@ -29,7 +29,7 @@ PLUGINS_CONFIG = {
     'netbox_napalm_plugin': {
         'NAPALM_USERNAME': 'xxx',
         'NAPALM_PASSWORD': 'yyy',
-    }
+    },
 }
 
 REDIS = {
@@ -46,7 +46,11 @@ REDIS = {
         'PASSWORD': '',
         'DATABASE': 1,
         'SSL': False,
-    }
+    },
 }
 
 SECRET_KEY = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+
+API_TOKEN_PEPPERS = {
+    1: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+}
