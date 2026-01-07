@@ -5,7 +5,7 @@ import strawberry
 import strawberry_django
 
 # NetBox Imports
-from netbox.graphql.filter_mixins import BaseObjectTypeFilterMixin
+from netbox.graphql.filters import PrimaryModelFilter
 
 # Plugin Imports
 from netbox_config_backup import models
@@ -18,9 +18,8 @@ __all__ = ('BackupFilter',)
 
 
 @strawberry_django.filter(models.Backup, lookups=True)
-class BackupFilter(BaseObjectTypeFilterMixin):
-    device: (
-        Annotated['DeviceFilter', strawberry.lazy('dcim.graphql.filters')]
-        | None  # noqa: F821
-    ) = strawberry_django.filter_field()  # noqa: F821
+class BackupFilter(PrimaryModelFilter):
+    device: Annotated['DeviceFilter', strawberry.lazy('dcim.graphql.filters')] | None = (  # noqa: F821
+        strawberry_django.filter_field()
+    )  # noqa: F821
     device_id: strawberry.ID | None = strawberry_django.filter_field()
