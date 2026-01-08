@@ -113,38 +113,42 @@ class BackupRunner(JobRunner):
 
         return scheduled_status
 
+
+    def get_scheduled_jobs(self):
+        return BackupJob.objects.filter(
+            runner=None,
+            status=JobStatusChoices.STATUS_SCHEDULED,
+            scheduled__lte=timezone.now(),
+        )
+
     def run_processes(self, backup=None):
         logger.info('Starting processes')
         if not self.running:
             logger.info('Not running')
             self.handle_main_exit(signal.SIGTERM, None)
-        jobs = BackupJob.objects.filter(
-            runner=None,
-            status=JobStatusChoices.STATUS_SCHEDULED,
-            scheduled__lte=timezone.now(),
-        ).prefetch_related('backup')
+        jobs = self.get_scheduled_jobs()
 
         if backup:
             jobs = jobs.filter(backup=backup)
             logger.info(f'Backup Job Count: {jobs.count()}')
+
         for job in jobs:
             job.runner = self.job
             job.status = JobStatusChoices.STATUS_PENDING
 
-        close_db()
         BackupJob.objects.bulk_update(jobs, ['runner', 'status'])
 
         self.job.data.update({'status': {'pending': jobs.count()}})
         self.job.clean()
         self.job.save()
 
+        close_db()
+
         for job in jobs:
             try:
                 logger.info(f'Forking {job} ({job.backup.name})')
                 process = self.fork_process(job)
                 process.join(1)
-                job.pid = process.pid
-                job.status = JobStatusChoices.STATUS_RUNNING
             except Exception as e:
                 logger.warning(f'Exception forking: {e}')
                 try:
@@ -155,9 +159,9 @@ class BackupRunner(JobRunner):
                     pass
                 job.status = JobStatusChoices.STATUS_FAILED
                 job.data['error'] = str(e)
-
+                job.full_clean()
+                job.save()
         close_db()
-        BackupJob.objects.bulk_update(jobs, ['pid', 'status', 'data'])
 
     def run_backup(self, job_id):
         self.job_id = job_id
@@ -173,7 +177,7 @@ class BackupRunner(JobRunner):
             return
         close_db()
         process = self.ctx.Process(
-            target=run_backup,
+            target=self.run_backup,
             args=(job.pk,),
         )
         data = {job.backup.pk: {'process': process, 'backup': job.backup.pk, 'job': job.pk}}
@@ -201,7 +205,6 @@ class BackupRunner(JobRunner):
 
     def handle_processes(self):
         for pk in list(self.processes.keys()):
-            terminated = self.job.data.get('status', {}).get('terminated', 0)
             completed = self.job.data.get('status', {}).get('completed', 0)
 
             process = self.processes.get(pk, {}).get('process')
@@ -212,19 +215,25 @@ class BackupRunner(JobRunner):
                 process.terminate()
                 del self.processes[pk]
                 job = BackupJob.objects.filter(pk=job_pk).first()
+                job.refresh_from_db()
                 if job and job.status not in [
                     JobStatusChoices.STATUS_COMPLETED,
                     JobStatusChoices.STATUS_FAILED,
                     JobStatusChoices.STATUS_ERRORED,
                 ]:
-                    self.job.data.update({'status': {'terminated': terminated}})
-                    job.status = JobStatusChoices.STATUS_ERRORED
-                    if not job.data:
-                        job.data = {}
-                    job.data.update({'error': 'Process terminated for unknown reason'})
+                    logger.debug(f'Job status not completed for {backup}: {job.status}')
                 else:
-                    self.job.data.update({'status': {'completed': completed}})
-                job.save()
+                    job.data.update(
+                        {
+                            'status': {'completed': completed},
+                            'job': {
+                                'status': job.status,
+                                'pid': process.pid,
+                                'exitcode': process.exitcode,
+                            },
+                        }
+                    )
+                    job.save()
 
         self.job.save()
         self.job.refresh_from_db()
