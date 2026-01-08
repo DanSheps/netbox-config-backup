@@ -26,7 +26,7 @@ logger = logging.getLogger("netbox_config_backup")
 job_frequency = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency', 3600)
 
 
-@system_job(interval=JobIntervalChoices.INTERVAL_MINUTELY * 15)
+@system_job(interval=JobIntervalChoices.INTERVAL_MINUTELY * 5)
 class BackupRunner(JobRunner):
     processes = {}
 
@@ -43,7 +43,7 @@ class BackupRunner(JobRunner):
         job.refresh_from_db()
 
     @classmethod
-    def clean_stale_jobs(cls):
+    def clean_stale_jobs(cls, backup=None):
         logger.info('Starting stale job cleanup')
         results = {'stale': 0, 'scheduled': 0}
 
@@ -54,6 +54,8 @@ class BackupRunner(JobRunner):
             )
             .prefetch_related('backup', 'backup__device')
         )
+        if backup:
+            jobs = jobs.filter(backup=backup)
 
         stale = jobs.filter(scheduled__lt=timezone.now() - timedelta(minutes=30))
         for job in stale:
@@ -83,20 +85,16 @@ class BackupRunner(JobRunner):
             logging.debug('Scheduling all backups for')
             backups = Backup.objects.filter(status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
 
-        frequency = timedelta(seconds=job_frequency)
-
         for backup in backups:
             if can_backup(backup):
                 logger.debug(f'Checking jobs for backup for {backup.device}' f'+')
-                jobs = BackupJob.objects.filter(backup=backup)
-                if jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES).count() == 0:
+                jobs = backup.jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES)
+                if jobs.filter(status=JobStatusChoices.STATUS_SCHEDULED, scheduled__gte=timezone.now()).exists():
+                    continue
+                else:
                     logger.debug(f'Queuing device {backup.device} for backup')
-                    if jobs.last() is not None and jobs.last().scheduled + frequency < timezone.now():
-                        scheduled = timezone.now()
-                    elif jobs.last() is not None:
-                        scheduled = jobs.last().scheduled + frequency
-                    else:
-                        scheduled = timezone.now()
+                    scheduled = timezone.now()
+                    logger.info(f'Scheduling {backup} for {scheduled} (Now: {timezone.now()}')
                     job = BackupJob(
                         runner=None,
                         backup=backup,
@@ -115,14 +113,20 @@ class BackupRunner(JobRunner):
 
         return scheduled_status
 
-    def run_processes(self):
+    def run_processes(self, backup=None):
+        logger.info('Starting processes')
         if not self.running:
+            logger.info('Not running')
             self.handle_main_exit(signal.SIGTERM, None)
         jobs = BackupJob.objects.filter(
             runner=None,
             status=JobStatusChoices.STATUS_SCHEDULED,
             scheduled__lte=timezone.now(),
-        )
+        ).prefetch_related('backup')
+
+        if backup:
+            jobs = jobs.filter(backup=backup)
+            logger.info(f'Backup Job Count: {jobs.count()}')
         for job in jobs:
             job.runner = self.job
             job.status = JobStatusChoices.STATUS_PENDING
@@ -136,11 +140,13 @@ class BackupRunner(JobRunner):
 
         for job in jobs:
             try:
+                logger.info(f'Forking {job} ({job.backup.name})')
                 process = self.fork_process(job)
                 process.join(1)
                 job.pid = process.pid
                 job.status = JobStatusChoices.STATUS_RUNNING
             except Exception as e:
+                logger.warning(f'Exception forking: {e}')
                 try:
                     import sentry_sdk
 
@@ -163,6 +169,7 @@ class BackupRunner(JobRunner):
 
     def fork_process(self, job):
         if not self.running:
+            logger.info('Not running')
             return
         close_db()
         process = self.ctx.Process(
@@ -271,14 +278,14 @@ class BackupRunner(JobRunner):
             self.job.save()
 
         try:
-            status = self.clean_stale_jobs()
+            status = self.clean_stale_jobs(backup=backup)
             self.job.data.update({'status': status})
 
             status = self.schedule_jobs(runner=self.job, backup=backup, device=device)
             self.job.data.update({'status': {'scheduled': status}})
 
             self.job.save()
-            self.run_processes()
+            self.run_processes(backup=backup)
 
             self.handle_processes()
             self.handle_stuck_jobs()
