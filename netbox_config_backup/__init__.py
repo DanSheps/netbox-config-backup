@@ -20,8 +20,16 @@ class NetboxConfigBackup(PluginConfig):
         'author',
     ]
     default_settings = {
-        # Frequency in seconds
+        # Frequency in seconds (Deprecated)
         'frequency': 3600,
+        # Frequency of backups in minutes
+        'backup_frequency': 60,
+        # Frequency of the job runner in minutes
+        'job_frequency': 5,
+        # Offset for Jobs in minutes (to offset jobs after a restart)
+        'offset': 6,
+        # Number of jobs per run
+        'workers': 10,
     }
     queues = ['jobs']
     graphql_schema = 'graphql.schema.schema'

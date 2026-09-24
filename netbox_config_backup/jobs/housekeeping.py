@@ -30,12 +30,14 @@ class BackupHousekeeping(JobRunner):
         jobs = Job.objects.filter(name__in=names, status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES)
         if jobs.count() > 0:
             for job in jobs:
-                if job.scheduled < timezone.now() - timedelta(minutes=30):
+                if job.scheduled is None or job.scheduled < timezone.now() - timedelta(minutes=30):
                     logger.info(f'Backup Job Runner {job} ({job.pk} is stale')
                     job.status = JobStatus.FAILED
                     job.clean()
                     job.save()
-                    job = BackupRunner.enqueue(scheduled_at=timezone.now() + timedelta(minutes=5))
-                    logger.info(f'\tNew Backup Job Runner enqueued as {job} ({job.pk})')
+
+        if jobs.count() == 0:
+            job = BackupRunner.enqueue(scheduled_at=timezone.now() + timedelta(minutes=5))
+            logger.info(f'\tNew Backup Job Runner enqueued as {job} ({job.pk})')
         else:
             logger.info('No stale jobs')
