@@ -1,15 +1,18 @@
 import logging
 import datetime
+import os
 import uuid as uuid
 
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
 from dcim.models import Device
 from netbox.models import PrimaryModel
 
 from netbox_config_backup.choices import StatusChoices
 from netbox_config_backup.helpers import get_repository_dir
+from ..git import repository
 
 from ..querysets import BackupQuerySet
 from ..utils import Differ
@@ -48,7 +51,6 @@ class Backup(PrimaryModel):
         return self.name
 
     def get_config(self, index='HEAD'):
-        from netbox_config_backup.git import repository
 
         running = repository.read(f'{self.uuid}.running')
         startup = repository.read(f'{self.uuid}.startup')
@@ -58,99 +60,117 @@ class Backup(PrimaryModel):
             'startup': startup if startup is not None else '',
         }
 
-    def set_config(self, configs, files=('running', 'startup'), pk=None):
+    def write_config(self, configs, files=('running', 'startup')):
+        stored_configs = self.get_config()
+        changes = []
+        for file in files:
+            stored = stored_configs.get(file) if stored_configs.get(file) is not None else ''
+            current = configs.get(file) if configs.get(file) is not None else ''
+            if Differ(stored, current).is_diff():
+                path = f'{repository.location}{os.path.sep}{self.uuid}.{file}'
+                changes.append({'name': f'{self.name}', 'uuid': f'{self.uuid}', f'path': f'{path}'})
+                with open(path, 'w') as f:
+                    f.write(current)
+                    f.close()
+
+        return changes
+
+    @classmethod
+    def commit(self, jobs):
+        backups = [str(job.backup) for job in jobs]
+        commit = repository.commit(
+            f'Backup commit for backup jobs: {",".join(backups)} on {timezone.now()}',
+        )
+        return commit
+
+    @classmethod
+    def rebuild_bctc_full(cls):
+        for backup in cls.objects.all():
+            backup.rebuild_bctc()
+
+    def rebuild_bctc(self):
+        from netbox_config_backup.models.repository import BackupCommitTreeChange
+        commits = self.update_commit_tree(depth=None)
+        # print(f'Validated {len(commits)}')
+        pks = [commit.pk for commit in commits]
+        orphan_commits = BackupCommitTreeChange.objects.filter(pk=self.pk).exclude(pk__in=pks)
+        if orphan_commits.count() > 0:
+            deleted = orphan_commits.delete()
+            # print(f'Deleted {deleted[0]} orphan commits')
+
+    def update_commit_tree(self, commit = None, depth = 1):
         from netbox_config_backup.models.repository import (
             BackupCommit,
             BackupObject,
             BackupFile,
             BackupCommitTreeChange,
         )
-        from netbox_config_backup.git import repository
 
-        LOCAL_TIMEZONE = (
-            datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
-        )
+        backupfiles = BackupFile.objects.filter(backup=self)
 
-        stored_configs = self.get_config()
-        changes = False
-        for file in files:
-            # logger.debug(f'[{pk}] Getting existing config for {file}')
-            stored = (
-                stored_configs.get(file) if stored_configs.get(file) is not None else ''
-            )
-            # logger.debug(f'[{pk}] Getting new config')
-            current = configs.get(file) if configs.get(file) is not None else ''
-
-            # logger.debug(f'[{pk}] Starting diff for {file}')
-            if Differ(stored, current).is_diff():
-                changes = True
-                output = repository.write(f'{self.uuid}.{file}', current)  # noqa: F841
-            # logger.debug(f'[{pk}] Finished diff for {file}')
-        if not changes:
-            return None
-
-        # logger.debug(f'[{pk}] Commiting files')
-        commit = repository.commit(
-            f'Backup of {self.device.name} for backup {self.name}'
-        )
-
-        # logger.debug(f'[{pk}] Getting repository log')
-        log = repository.log(index=commit, depth=1)[0]
-
-        # logger.debug(f'[{pk}] Saving commit to DB')
-        bc = BackupCommit.objects.filter(sha=commit)
-        time = log.get('time', datetime.datetime.now()).replace(tzinfo=LOCAL_TIMEZONE)
-        if bc.count() > 0:
-            # logger.debug(f'[{pk}] Error committing')
-            raise Exception('Commit already exists for this backup and sha value')
+        if not commit:
+            logs = repository.log(index='HEAD', depth=depth, uuid=self.uuid)
         else:
-            # logger.debug(f'[{pk}] Saving commit')
-            bc = BackupCommit(sha=commit, time=time)
-            logger.debug(f'{self}: {commit}:{bc.time}')
-            bc.save()
+            logs = repository.log(index=commit, depth=1, uuid=self.uuid)
 
-        for change in log.get('changes', []):
-            # logger.debug(f'[{pk}] Adding backup tree changes')
-            backupfile = None
-            change_data = {}
-            for key in ['old', 'new']:
-                sha = change.get(key, {}).get('sha', None)
-                file = change.get(key, {}).get('path', None)
-                if sha is not None and file is not None:
-                    uuid, type = file.split('.')  # noqa: F841
+        commits = []
+        for log in reversed(logs):
+            commit = log.get('sha')
+            if len(log.get('parents', [])) > 1:
+                raise Exception('Not programmed to handle more then 1 parent')
+            parent = log.get('parents', []).pop() if log.get('parents', []) else None
+            time = log.get('time')
+            try:
+                bc = BackupCommit.objects.get(sha=commit)
+            except BackupCommit.DoesNotExist:
+                bc = BackupCommit(sha=commit, time=time)
+                bc.full_clean()
+                bc.save()
+
+            for change in log.get('changes', []):
+                change_data = {}
+                for key in ['old', 'new']:
+                    sha = change.get(key, {}).get('sha', None)
+                    file = change.get(key, {}).get('path', None)
+                    uuid, type = file.split('.') if file is not None else (None, None)
+                    if str(uuid) != str(self.uuid):
+                        # Not the change associated with this commit so exit the inner loop
+                        continue
                     try:
                         object = BackupObject.objects.get(sha=sha)
                     except BackupObject.DoesNotExist:
                         object = BackupObject.objects.create(sha=sha)
-                    try:
-                        backupfile = BackupFile.objects.get(backup=self, type=type)
-                    except BackupFile.DoesNotExist:
-                        backupfile = BackupFile.objects.create(backup=self, type=type)
-                    change_data[key] = object
 
-            bctc = BackupCommitTreeChange.objects.filter(
-                backup=self,
-                file=backupfile,
-                commit=bc,
-                type=change.get('type', None),
-                old=change_data.get('old', None),
-                new=change_data.get('new', None),
-            )
-            if bctc.count() > 0:
-                bctc = bctc.first()
-            elif bctc.count() == 0:
-                bctc = BackupCommitTreeChange(
-                    backup=self,
-                    file=backupfile,
-                    commit=bc,
-                    type=change.get('type', None),
-                    old=change_data.get('old', None),
-                    new=change_data.get('new', None),
-                )
-                bctc.save()
-                # logger.debug(f'[{pk}] Tree saved')
-        # logger.debug(f'[{pk}] Get config saved')
-        return commit
+                    if backupfiles.filter(type=type).count() == 0:
+                        backupfile = BackupFile(backup=self, type=type)
+                        backupfile.full_clean()
+                        backupfile.save()
+
+                    change_data[key] = object
+                if str(uuid) != str(self.uuid):
+                    continue
+                try:
+                    bctc = BackupCommitTreeChange.objects.get(
+                        backup=self,
+                        file=backupfiles.get(type=type),
+                        commit=bc,
+                        type=change.get('type', None),
+                        old=change_data.get('old', None),
+                        new=change_data.get('new', None),
+                    )
+                except BackupCommitTreeChange.DoesNotExist:
+                    bctc = BackupCommitTreeChange(
+                        backup=self,
+                        file=backupfiles.get(type=type),
+                        commit=bc,
+                        type=change.get('type', None),
+                        old=change_data.get('old', None),
+                        new=change_data.get('new', None),
+                    )
+                    bctc.save()
+                commits.append(bctc)
+
+        return commits
 
     @classmethod
     def get_repository_dir(cls):

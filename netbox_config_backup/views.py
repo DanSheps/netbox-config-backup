@@ -56,6 +56,19 @@ class BackupJobListView(ObjectListView):
     actions = ()
 
 
+@register_model_view(BackupJob)
+class BackupJobView(ObjectListView):
+    queryset = BackupJob.objects.all()
+    template_name = 'netbox_config_backup/backupjob.html'
+    actions = ()
+
+
+@register_model_view(BackupJob, 'delete')
+class BackupJobDeleteView(ObjectDeleteView):
+    queryset = BackupJob.objects.all()
+
+
+
 @register_model_view(Backup, name='list', path='', detail=False)
 class BackupListView(ObjectListView):
     queryset = Backup.objects.filter(device__isnull=False).default_annotate()

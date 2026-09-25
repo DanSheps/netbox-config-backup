@@ -1,5 +1,8 @@
 import os
 from datetime import datetime
+from fnmatch import fnmatch
+
+from django.utils import timezone
 from time import sleep
 
 from deepdiff import DeepDiff
@@ -45,6 +48,10 @@ class GitBackup:
             except OSError:
                 pass
 
+    def add(self, file):
+        path = f'{self.location}{os.path.sep}{file}'
+        porcelain.add(self.repository, path)
+
     def write(self, file, data):
         path = f'{self.location}{os.path.sep}{file}'
         with open(path, 'w') as f:
@@ -62,7 +69,15 @@ class GitBackup:
                 if failures >= 10:
                     raise Exception('Unable to acquire lock on repository in a timely manner')
 
+    def status(self):
+        return porcelain.status(self.repository)
+
     def commit(self, message):
+        status = porcelain.status(self.repository)
+        staged = status.staged
+        if not staged.get('add') and not staged.get('delete') and not staged.get('modify'):
+            return None
+
         committer = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('committer', None)
         author = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('author', None)
 
@@ -111,18 +126,24 @@ class GitBackup:
         diff = DeepDiff(data[0], data[1]).diff()
         return diff
 
-    def log(self, file=None, paths=[], index=None, depth=None):
-
+    def log(self, file=None, paths=None, index=None, depth=None, uuid=None):
+        tz = timezone.now().astimezone().tzinfo
         if file is not None:
             path = file.encode('ascii')
+            uuid = None
             paths = [path]
-        else:
+        elif paths is not None:
             path = None
+            uuid = None
             for idx in range(0, len(paths)):
                 path = paths[idx]
                 paths[idx] = path.encode('ascii')
+        else:
+            path = None
 
-        if index is not None:
+        if index == 'HEAD':
+            index = self.repository.head()
+        elif index is not None:
             index = index.encode('ascii')
 
         walker = self.repository.get_walker(include=index, paths=paths, max_entries=depth)
@@ -137,7 +158,7 @@ class GitBackup:
                 'message': decode(entry.commit.message, encoding),
                 'parents': [decode(parent, encoding) for parent in entry.commit.parents],
                 'sha': str(entry.commit.sha().hexdigest()),
-                'time': datetime.fromtimestamp(entry.commit.commit_time),
+                'time': datetime.fromtimestamp(entry.commit.commit_time, tz=tz),
                 'tree': decode(entry.commit.tree, encoding),
             }
             changes = []
@@ -177,8 +198,25 @@ class GitBackup:
                 )
 
             output.update({'changes': changes})
-            indexes.append(output)
 
+            uuids = []
+            if uuid is None:
+                indexes.append(output)
+            elif uuid is not None:
+                uuids = set(
+                    [
+                        change.get('old', {}).get('path').split('.')[0]
+                        for change in changes
+                        if change.get('old', {}).get('path') is not None
+                    ]
+                    + [
+                        change.get('new', {}).get('path').split('.')[0]
+                        for change in changes
+                        if change.get('new', {}).get('path') is not None
+                    ]
+                )
+                if str(uuid) in uuids:
+                    indexes.append(output)
         return indexes
 
 

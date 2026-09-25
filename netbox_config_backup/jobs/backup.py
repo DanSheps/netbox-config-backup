@@ -1,21 +1,22 @@
+import dataclasses
 import logging
-import signal
-import time
+import os
 import uuid
 import traceback
 import multiprocessing
-from datetime import timedelta
+from datetime import timedelta, datetime
 
+from django import db
 from django.utils import timezone
 
 from core.choices import JobStatusChoices, JobIntervalChoices
-from netbox import settings
+from netbox.api.exceptions import ServiceUnavailable
 from netbox.jobs import JobRunner, system_job
-from netbox_config_backup.backup.processing import run_backup
+from netbox.plugins import get_plugin_config
 from netbox_config_backup.choices import StatusChoices
-from netbox_config_backup.exceptions import JobExit
 from netbox_config_backup.models import Backup, BackupJob
-from netbox_config_backup.utils.db import close_db
+from netbox_config_backup.utils.configs import check_config_save_status
+from netbox_config_backup.utils.napalm import napalm_init
 from netbox_config_backup.utils.rq import can_backup
 
 __all__ = ('BackupRunner',)
@@ -23,10 +24,24 @@ __all__ = ('BackupRunner',)
 
 logger = logging.getLogger("netbox_config_backup")
 
-job_frequency = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency', 3600)
+job_frequency = get_plugin_config('netbox_config_backup', 'job_frequency', 5)
+
+if backup_frequency := get_plugin_config('netbox_config_backup', 'backup_frequency', None):
+    backup_frequency = get_plugin_config('netbox_config_backup', 'frequency', 3600)
 
 
-@system_job(interval=JobIntervalChoices.INTERVAL_MINUTELY * 5)
+@dataclasses.dataclass()
+class BackupResult:
+    job: int
+    pid: int
+    status: str = 'running'
+    config_save_status = None
+    message: str = ''
+    completed: datetime = None
+    files: list = None
+
+
+@system_job(interval=JobIntervalChoices.INTERVAL_MINUTELY * job_frequency)
 class BackupRunner(JobRunner):
     processes = {}
 
@@ -34,286 +49,327 @@ class BackupRunner(JobRunner):
         name = 'Backup Job Runner'
 
     @classmethod
-    def fail_job(cls, job: BackupJob, status: str, error: str = ''):
-        job.status = status
-        if not job.data:
-            job.data = {}
-        job.data.update({'error': 'Process terminated'})
-        job.save()
-        job.refresh_from_db()
+    def init_worker(cls):
+        db.connections.close_all()
 
     @classmethod
-    def clean_stale_jobs(cls, backup=None):
-        logger.info('Starting stale job cleanup')
-        results = {'stale': 0, 'scheduled': 0}
-
-        jobs = (
-            BackupJob.objects.order_by('created')
-            .filter(
-                status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES,
-            )
-            .prefetch_related('backup', 'backup__device')
-        )
-        if backup:
-            jobs = jobs.filter(backup=backup)
-
-        stale = jobs.filter(scheduled__lt=timezone.now() - timedelta(minutes=30))
-        for job in stale:
-            results['stale'] += 1
-            cls.fail_job(job, JobStatusChoices.STATUS_FAILED, 'Job hung')
-            logger.warning(f'Job {job.backup} appears stuck, deleting')
-
-        scheduled = jobs.filter(status=JobStatusChoices.STATUS_SCHEDULED)
-        for job in scheduled:
-            if job != scheduled.filter(backup=job.backup).last():
-                results['scheduled'] += 1
-                cls.fail_job(job, JobStatusChoices.STATUS_ERRORED, 'Job missed')
-                logger.warning(f'Job {job.backup} appears to have been missed, deleting')
-
-        return results
+    def fail_job(cls, jobs=None, status=JobStatusChoices.STATUS_FAILED, message=''):
+        for job in jobs:
+            job.status = status
+            job.data.update({'error': {message}})
+            job.full_clean()
+        return BackupJob.objects.bulk_update(jobs, ['status', 'data'])
 
     @classmethod
-    def schedule_jobs(cls, runner, backup=None, device=None):
-        scheduled_status = 0
-        if backup:
-            logging.debug(f'Scheduling backup for backup: {backup}')
-            backups = Backup.objects.filter(pk=backup.pk, status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
-        elif device:
-            logging.debug(f'Scheduling backup for device: {device}')
-            backups = Backup.objects.filter(device=device, status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
-        else:
-            logging.debug('Scheduling all backups for')
-            backups = Backup.objects.filter(status=StatusChoices.STATUS_ACTIVE, device__isnull=False)
+    def clean_jobs(cls, backups=None):
+        # Check for duplicate jobs
+        if not backups:
+            backups = Backup.objects.all()
 
+        cutoff = timezone.now() - timedelta(minutes=job_frequency)
+
+        counts = {}
+        stuck = {}
         for backup in backups:
-            if can_backup(backup):
-                logger.debug(f'Checking jobs for backup for {backup.device}' f'+')
+            count = {'stuck': 0, 'duplicated': 0, 'missed': 0}
+            jobs = backup.jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES)
+            running = jobs.filter(status__in=[JobStatusChoices.STATUS_RUNNING, JobStatusChoices.STATUS_PENDING])
+            scheduled = jobs.filter(status__in=[JobStatusChoices.STATUS_SCHEDULED])
+            if running.filter(scheduled__lte=cutoff).count() > 0:
+                stuck = running.filter(scheduled__lte=cutoff).update(status=JobStatusChoices.STATUS_FAILED)
+                count['stuck'] = stuck
+
+            if running.count() > 1 and scheduled.count() >= 1:
+                count['duplicated'] = jobs.exclude(pk=scheduled.last().pk).update(status=JobStatusChoices.STATUS_FAILED)
+            elif running.count() > 1 and scheduled.count() == 0:
+                filter = {
+                    'started__lte': timezone.now() + timedelta(minutes=5),
+                }
+                count['duplicated'] = running.filter(**filter).update(status=JobStatusChoices.STATUS_FAILED)
+            elif scheduled.count() > 1:
+                count['duplicated'] = scheduled.exclude(pk=scheduled.last().pk).update(
+                    status=JobStatusChoices.STATUS_FAILED
+                )
+
+            if count:
+                counts.update({str(backup): count})
+        return counts
+
+    def schedule_missed_jobs(self, backups):
+        if not backups:
+            backups = Backup.objects.filter(device__isnull=False, status=StatusChoices.STATUS_ACTIVE)
+
+        now = timezone.now()
+        count = 0
+        counts = {}
+        for backup in backups:
+            job = None
+            if not can_backup(backup):
                 jobs = backup.jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES)
-                if jobs.filter(status=JobStatusChoices.STATUS_SCHEDULED, scheduled__gte=timezone.now()).exists():
-                    continue
+                self.logger.debug(f'Cannot backup {backup}')
+                failed = self.fail_job(jobs)
+                if counts.get('failed', 0):
+                    counts['failed'] += failed
                 else:
-                    logger.debug(f'Queuing device {backup.device} for backup')
-                    scheduled = timezone.now()
-                    logger.info(f'Scheduling {backup} for {scheduled} (Now: {timezone.now()}')
-                    job = BackupJob(
-                        runner=None,
-                        backup=backup,
-                        status=JobStatusChoices.STATUS_SCHEDULED,
-                        scheduled=scheduled,
-                        job_id=uuid.uuid4(),
-                        data={},
-                    )
-                    job.full_clean()
-                    job.save()
-                    scheduled_status += 1
-            else:
-                jobs = BackupJob.objects.filter(backup=backup, status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES)
-                for job in jobs:
-                    cls.fail_job(job, JobStatusChoices.STATUS_FAILED, 'Cannot queue job')
+                    counts['failed'] = failed
+                continue
 
-        return scheduled_status
-
-
-    def get_scheduled_jobs(self):
-        return BackupJob.objects.filter(
-            runner=None,
-            status=JobStatusChoices.STATUS_SCHEDULED,
-            scheduled__lte=timezone.now(),
-        )
-
-    def run_processes(self, backup=None):
-        logger.info('Starting processes')
-        if not self.running:
-            logger.info('Not running')
-            self.handle_main_exit(signal.SIGTERM, None)
-        jobs = self.get_scheduled_jobs()
-
-        if backup:
-            jobs = jobs.filter(backup=backup)
-            logger.info(f'Backup Job Count: {jobs.count()}')
-
-        for job in jobs:
-            job.runner = self.job
-            job.status = JobStatusChoices.STATUS_PENDING
-
-        BackupJob.objects.bulk_update(jobs, ['runner', 'status'])
-
-        self.job.data.update({'status': {'pending': jobs.count()}})
-        self.job.clean()
-        self.job.save()
-
-        close_db()
-
-        for job in jobs:
-            try:
-                logger.info(f'Forking {job} ({job.backup.name})')
-                process = self.fork_process(job)
-                process.join(1)
-            except Exception as e:
-                logger.warning(f'Exception forking: {e}')
-                try:
-                    import sentry_sdk
-
-                    sentry_sdk.capture_exception(e)
-                except ModuleNotFoundError:
-                    pass
-                job.status = JobStatusChoices.STATUS_FAILED
-                job.data['error'] = str(e)
+            if backup.jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES).count() == 0:
+                if count > get_plugin_config('netbox_config_backup', 'workers', 10):
+                    count = 0
+                    now += timedelta(minutes=get_plugin_config('netbox_config_backup', 'offset', 5))
+                job = BackupJob(
+                    runner=None,
+                    backup=backup,
+                    status=JobStatusChoices.STATUS_SCHEDULED,
+                    scheduled=now,
+                    job_id=uuid.uuid4(),
+                    data={},
+                )
                 job.full_clean()
                 job.save()
-        close_db()
+                count += 1
 
-    def run_backup(self, job_id):
-        self.job_id = job_id
-        if not self.running:
-            self.handle_main_exit(signal.SIGTERM, None)
-        signal.signal(signal.SIGTERM, self.handle_child_exit)
-        signal.signal(signal.SIGINT, self.handle_child_exit)
-        run_backup(job_id)
+            if job:
+                counts.update({str(backup): count})
+        return counts
 
-    def fork_process(self, job):
-        if not self.running:
-            logger.info('Not running')
-            return
-        close_db()
-        process = self.ctx.Process(
-            target=self.run_backup,
-            args=(job.pk,),
-        )
-        data = {job.backup.pk: {'process': process, 'backup': job.backup.pk, 'job': job.pk}}
-        self.processes.update(data)
-        process.start()
-        logger.debug(f'Forking process {process.pid} for {job.backup} backup')
-        return process
+    @classmethod
+    def get_backup_jobs(cls, backups=None):
 
-    def handle_stuck_jobs(self):
-        jobs = BackupJob.objects.filter(
-            status__in=['running', 'pending'],
-            started__gte=timezone.now() + timedelta(seconds=job_frequency),
-        )
+        jobs = BackupJob.objects.filter(backup__device__isnull=False, status=JobStatusChoices.STATUS_SCHEDULED)
+        if backups:
+            jobs = jobs.filter(backup__in=backups)
+        jobs = jobs[0 : get_plugin_config('netbox_config_backup', 'workers', 10)]
+
         for job in jobs:
-            if self.processes.get(job.backup.pk):
-                process = self.processes.get(job.backup.pk)
-                if process.is_alive():
-                    process.terminate()
-                del self.processes[job.backup.pk]
-            job.status = JobStatusChoices.STATUS_ERRORED
-            if not job.data:
-                job.data = {}
-            job.data.update({'error': 'Process terminated'})
-        BackupJob.objects.bulk_update(jobs, ['status', 'data'])
+            job.status = JobStatusChoices.STATUS_PENDING
+            job.full_clean()
+            job.save()
 
-    def handle_processes(self):
-        for pk in list(self.processes.keys()):
-            completed = self.job.data.get('status', {}).get('completed', 0)
+        return jobs
 
-            process = self.processes.get(pk, {}).get('process')
-            job_pk = self.processes.get(pk, {}).get('job')
-            backup = self.processes.get(pk, {}).get('backup')
-            if not process.is_alive():
-                logger.debug(f'Terminating process {process.pid} with job pk of {pk} for {backup}')
-                process.terminate()
-                del self.processes[pk]
-                job = BackupJob.objects.filter(pk=job_pk).first()
-                job.refresh_from_db()
-                if job and job.status not in [
-                    JobStatusChoices.STATUS_COMPLETED,
-                    JobStatusChoices.STATUS_FAILED,
-                    JobStatusChoices.STATUS_ERRORED,
-                ]:
-                    logger.debug(f'Job status not completed for {backup}: {job.status}')
-                else:
-                    job.data.update(
-                        {
-                            'status': {'completed': completed},
-                            'job': {
-                                'status': job.status,
-                                'pid': process.pid,
-                                'exitcode': process.exitcode,
-                            },
-                        }
-                    )
-                    job.save()
-
-        self.job.save()
-        self.job.refresh_from_db()
-
-    def handle_main_exit(self, signum, frame):
-        logger.info(f'Exiting Main: {signum}')
-        self.handle_exit('Parent', signum)
-
-    def handle_child_exit(self, signum, frame):
-        logger.info(f'Exiting Child: {signum}')
-        self.handle_exit('Child', signum)
-        raise JobExit('Terminating')
-
-    def handle_exit(self, process, signum):
-        code = f'UNKNOWN: {signum}'
-        match signum:
-            case signal.SIGKILL:
-                code = 'SIGKILL'
-            case signal.SIGTERM:
-                code = 'SIGTERM'
-            case signal.SIGINT:
-                code = 'SIGINT'
-        logger.info(f'Exiting {process}: {code}')
-        self.job.data.update({'status': {'terminated': 1}})
-        if process != 'Child':
-            self.running = False
-            for pk in list(self.processes.keys()):
-                process = self.processes.get(pk, {}).get('process')
-                job_pk = self.processes.get(pk, {}).get('job')
-                job = BackupJob.objects.filter(pk=job_pk).first()
-                job.status = JobStatusChoices.STATUS_ERRORED
-                job.data.update({'error': f'{process}: {code}'})
-                job.clean()
-                job.save()
-                process.terminate()
-                try:
-                    process.join()
-                except AssertionError:
-                    pass
-
-    def run(self, backup=None, device=None, *args, **kwargs):
-
-        self.ctx = multiprocessing.get_context()
-        self.running = True
-
-        signal.signal(signal.SIGTERM, self.handle_main_exit)
-        signal.signal(signal.SIGINT, self.handle_main_exit)
-
-        if not self.job.data:
-            self.job.data = {}
-            self.job.save()
-
+    @classmethod
+    def run_backup(cls, job_pk):
+        result = BackupResult(pid=os.getpid(), job=job_pk)
         try:
-            status = self.clean_stale_jobs(backup=backup)
-            self.job.data.update({'status': status})
-
-            status = self.schedule_jobs(runner=self.job, backup=backup, device=device)
-            self.job.data.update({'status': {'scheduled': status}})
-
-            self.job.save()
-            self.run_processes(backup=backup)
-
-            self.handle_processes()
-            self.handle_stuck_jobs()
-
-            while self.running:
-                self.handle_processes()
-                self.handle_stuck_jobs()
-                if len(self.processes) == 0:
-                    self.running = False
-                time.sleep(1)
-        except JobExit as e:
-            raise e
-        except Exception as e:
+            logger = logging.getLogger("netbox_config_backup")
+            logger.info(f'Starting backup for job {job_pk}')
             try:
-                import sentry_sdk
+                job = BackupJob.objects.get(pk=job_pk)
+            except Exception as e:
+                logger.error(f'Unable to load job {job_pk}: {e}')
+                logger.debug(f'\t{traceback.format_exc()}')
+                raise e
 
-                sentry_sdk.capture_exception(e)
-            except ModuleNotFoundError:
-                pass
-            logger.warning(f'{traceback.format_exc()}')
-            logger.error(f'{e}')
+            try:
+
+                logger.debug(f'Checking backup status for {job}')
+                if not can_backup(job.backup):
+                    logger.info(f'Cannot backup {job.backup}')
+                    result.status = JobStatusChoices.STATUS_FAILED
+                    result.message = f'Cannot backup {job.backup}'
+                    return result
+
+                ip = job.backup.ip if job.backup.ip is not None else job.backup.device.primary_ip
+                if ip:
+                    logger.debug(f'Trying to connect to device {job.backup.device} with ip {ip} for {job}')
+                    try:
+                        d = napalm_init(job.backup.device, ip)
+                    except (TimeoutError, ServiceUnavailable) as e:
+                        logger.debug(f'Timeout Connecting to {job.backup.device} with ip {ip}')
+                        result.status = (
+                            JobStatusChoices.STATUS_FAILED
+                            if result.status in [JobStatusChoices.ENQUEUED_STATE_CHOICES]
+                            else result.status
+                        )
+                        result.message = f'Exception in {job_pk}: {e}'
+                        return result
+
+                    try:
+                        logger.debug(f'Checking config save status for {job.backup}')
+                        result.config_save_status = check_config_save_status(d)
+                    except Exception as e:
+                        logger.error(f'{job.backup}: had error setting backup status: {e}')
+
+                    logger.debug(f'Getting config for {job.backup}')
+                    configs = d.get_config()
+                    logger.debug(f'Setting config for {job.backup}')
+                    result.files = job.backup.write_config(configs)
+                    logger.debug(f'Wrote config for {job.backup}')
+                    logger.debug(f'Closing connection for {job.backup}')
+                    result.completed = timezone.now()
+                    result.status = JobStatusChoices.STATUS_COMPLETED
+                    d.close()
+            except Exception as e:
+                logger.error(f'Exception in {job_pk}: {e}')
+                logger.error(f'\t{traceback.format_exc()}')
+                result.status = (
+                    JobStatusChoices.STATUS_FAILED
+                    if result.status in [JobStatusChoices.ENQUEUED_STATE_CHOICES]
+                    else result.status
+                )
+                result.message = f'Exception in {job_pk}: {e}'
+                return result
+        except Exception as e:
+            logger.error(f'Exception in {job_pk}: {e}')
+            logger.error(f'\t{traceback.format_exc()}')
+            result.status = (
+                JobStatusChoices.STATUS_FAILED
+                if result.status in [JobStatusChoices.ENQUEUED_STATE_CHOICES]
+                else result.status
+            )
+            result.message = f'Exception in {job_pk}: {e}'
+        return result
+
+    def schedule_job(self, jobs):
+        frequency = get_plugin_config('netbox_config_backup', 'frequency', 3600)
+        new_jobs = []
+        counts = {
+            'scheduled': 0,
+            'failed': 0,
+        }
+        for job in jobs:
+            job.refresh_from_db()
+            self.logger.debug(f'Scheduling next backup for {job.backup}')
+            if job.status in JobStatusChoices.TERMINAL_STATE_CHOICES:
+                scheduled = job.completed + timedelta(seconds=frequency)
+                self.logger.debug(f'Elligible for: {scheduled}')
+                new_job = BackupJob(
+                    runner=None,
+                    backup=job.backup,
+                    status=JobStatusChoices.STATUS_SCHEDULED,
+                    scheduled=scheduled,
+                    job_id=uuid.uuid4(),
+                    data={},
+                )
+                new_job.full_clean()
+                new_job.save()
+                new_jobs.append(new_job)
+                counts['scheduled'] += 1
+            else:
+                self.logger.debug(f'Not eligible for: {job.backup} due to state: {job.status}')
+                counts['failed'] += 1
+
+        return jobs
+
+    def run(self, backup: Backup = None, *args, **kwargs):
+        try:
+            started = timezone.now()
+            if backup is not None:
+                backups = [
+                    backup,
+                ]
+            else:
+                backups = []
+
+            job_start = timezone.now()
+            # Clean Job
+            count = self.clean_jobs(backups=backups)
+            job_end = timezone.now()
+            self.logger.info(
+                f'Cleaned {count} jobs. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+            job_start = timezone.now()
+            # Schedule missed jobs
+            count = self.schedule_missed_jobs(backups=backups)
+            job_end = timezone.now()
+            self.logger.info(
+                f'Scheduled {count} missed jobs. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+            job_start = timezone.now()
+            # Get backup jobs
+            jobs = self.get_backup_jobs(backups=backups)
+            job_end = timezone.now()
+            self.logger.info(
+                f'Got {len(jobs)} jobs. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+            job_start = timezone.now()
+            # Change jobs to run status before we begin
+            for job in jobs:
+                job.status = JobStatusChoices.STATUS_RUNNING
+                job.started = timezone.now()
+                job.full_clean()
+                job.save()
+
+            # Close DB Connections to prevent file descriptor leakage between instances
+            job_end = timezone.now()
+            self.logger.info(
+                f'Updated {len(jobs)} jobs. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+            job_start = timezone.now()
+            db.connections.close_all()
+            # Startup multiple workers to grab queued configs
+            with multiprocessing.Pool(
+                processes=get_plugin_config('netbox_config_backup', 'workers', 10), initializer=self.init_worker
+            ) as pool:
+                # Report the results
+                results = pool.map(self.run_backup, [job.pk for job in jobs])
+            job_end = timezone.now()
+            self.logger.info(
+                f'Obtained {len(results)} configs. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+            job_start = timezone.now()
+            # Perform the commit
+            commit = Backup.commit(jobs)
+            job_end = timezone.now()
+            self.logger.info(
+                f'Commit configs ({commit if commit else '' }). Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+            if commit:
+                job_start = timezone.now()
+                # Update the DB
+                for job in jobs:
+                    job.backup.update_commit_tree(commit=commit)
+                job_end = timezone.now()
+                self.logger.info(
+                    f'Updated Commit Tree. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                    f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+                )
+
+            job_start = timezone.now()
+
+            # Update the job in DB
+            for result in results:
+                job = BackupJob.objects.get(pk=result.job)
+                logger.info(f'Updating job {job} with result: {result.status}')
+                job.status = result.status
+                job.completed = result.completed
+                job.data = {'files': result.files} if result.files else {}
+                if result.message:
+                    job.data.update({'message': result.message})
+                job.full_clean()
+                job.save()
+                job.backup.config_status = result.config_save_status.get('status', False)
+                job.backup.full_clean()
+                job.backup.save()
+            job_end = timezone.now()
+            self.logger.info(
+                f'Updated job results. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+            job_start = timezone.now()
+
+            self.schedule_job(jobs)
+            job_end = timezone.now()
+            self.logger.info(
+                f'Scheduled new jobs. Time taken: {(job_end - job_start).total_seconds()} seconds. '
+                f'Total elapsed: {(job_end - started).total_seconds()} seconds.'
+            )
+
+        except Exception as e:
+            traceback.print_exc()
             raise e

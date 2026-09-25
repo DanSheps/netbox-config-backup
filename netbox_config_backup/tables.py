@@ -2,7 +2,7 @@ import django_tables2 as tables
 from django_tables2.utils import Accessor
 
 from netbox_config_backup.models import Backup, BackupCommitTreeChange, BackupJob
-from netbox.tables import columns, BaseTable, NetBoxTable
+from netbox.tables import columns, BaseTable, NetBoxTable, PrimaryModelTable, ActionsColumn
 
 
 class ActionButtonsColumn(tables.TemplateColumn):
@@ -30,7 +30,7 @@ class ActionButtonsColumn(tables.TemplateColumn):
         return ''
 
 
-class BackupJobTable(BaseTable):
+class BackupJobTable(NetBoxTable):
     id = tables.Column(linkify=True, verbose_name='ID')
     pk = columns.ToggleColumn()
     backup = tables.Column(linkify=True, verbose_name='Backup')
@@ -38,8 +38,9 @@ class BackupJobTable(BaseTable):
     scheduled = tables.DateTimeColumn()
     started = tables.DateTimeColumn()
     completed = tables.DateTimeColumn()
+    actions = ActionsColumn(actions=['delete', ])
 
-    class Meta(BaseTable.Meta):
+    class Meta(NetBoxTable.Meta):
         model = BackupJob
         fields = (
             'pk',
@@ -67,7 +68,7 @@ class BackupJobTable(BaseTable):
         return f'{value.count()}'
 
 
-class BackupTable(BaseTable):
+class BackupTable(PrimaryModelTable):
     pk = columns.ToggleColumn()
     name = tables.Column(linkify=True, verbose_name='Backup Name')
     device = tables.Column(
@@ -82,7 +83,7 @@ class BackupTable(BaseTable):
     backup_count = tables.Column(accessor='changes')
     config_status = tables.BooleanColumn(verbose_name='Config Saved')
 
-    class Meta(BaseTable.Meta):
+    class Meta(PrimaryModelTable.Meta):
         model = Backup
         fields = (
             'pk',

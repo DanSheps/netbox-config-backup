@@ -5,21 +5,48 @@ from django.db.models import Q
 from django.utils.translation import gettext as _
 from netaddr import AddrFormatError
 
-from netbox.filtersets import BaseFilterSet
+from core.choices import JobStatusChoices
+from netbox.filtersets import BaseFilterSet, PrimaryModelFilterSet, NetBoxModelFilterSet
 from dcim.models import Device
 from netbox_config_backup import models
 from netbox_config_backup.choices import FileTypeChoices
+from netbox_config_backup.models import Backup
+from utilities import filters
+from utilities.filtersets import register_filterset
 
 
-class BackupJobFilterSet(BaseFilterSet):
+@register_filterset
+class BackupJobFilterSet(NetBoxModelFilterSet):
     q = django_filters.CharFilter(
         method='search',
         label=_('Search'),
     )
+    backup_id = django_filters.ModelMultipleChoiceFilter(
+        field_name='backup',
+        queryset=Backup.objects.all(),
+        label=_('Backup (ID)'),
+    )
+    status = django_filters.MultipleChoiceFilter(
+        choices=JobStatusChoices,
+        distinct=False,
+        null_value=None
+    )
+    created = filters.MultiValueDateTimeFilter()
+    scheduled = filters.MultiValueDateTimeFilter()
+    started = filters.MultiValueDateTimeFilter()
+    completed = filters.MultiValueDateTimeFilter()
 
     class Meta:
         model = models.BackupJob
-        fields = ['id', 'status']
+        fields = [
+            'id',
+            'status',
+            'backup_id',
+            'created',
+            'scheduled',
+            'started',
+            'completed',
+        ]
 
     def search(self, queryset, name, value):
         if not value.strip():
@@ -33,7 +60,8 @@ class BackupJobFilterSet(BaseFilterSet):
         return queryset.filter(qs_filter)
 
 
-class BackupFilterSet(BaseFilterSet):
+@register_filterset
+class BackupFilterSet(PrimaryModelFilterSet):
     q = django_filters.CharFilter(
         method='search',
         label=_('Search'),
@@ -60,7 +88,7 @@ class BackupFilterSet(BaseFilterSet):
 
     class Meta:
         model = models.Backup
-        fields = ['id', 'name', 'ip']
+        fields = ['q', 'id', 'name', 'ip']
 
     def search(self, queryset, name, value):
         if not value.strip():
@@ -97,6 +125,7 @@ class BackupFilterSet(BaseFilterSet):
             return queryset.none()
 
 
+@register_filterset
 class BackupsFilterSet(BaseFilterSet):
     q = django_filters.CharFilter(
         method='search',

@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name='backupcommit',
             constraint=models.CheckConstraint(
-                check=models.Q(('backup__isnull', False), ('sha__isnull', False)),
+                condition=models.Q(('backup__isnull', False), ('sha__isnull', False)),
                 name='backup_and_sha_not_null',
             ),
         ),
