@@ -352,7 +352,11 @@ class BackupRunner(JobRunner):
                     job.data.update({'message': result.message})
                 job.full_clean()
                 job.save()
-                job.backup.config_status = result.config_save_status.get('status', False)
+                if result.config_save_status:
+                    job.backup.config_status = result.config_save_status.get('status', False)
+                else:
+                    self.logger.info(f'Job {job} for {job.backup} cannot fetch config save status')
+                    job.backup.config_status = False
                 job.backup.full_clean()
                 job.backup.save()
             job_end = timezone.now()
