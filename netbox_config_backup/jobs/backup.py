@@ -5,6 +5,7 @@ import uuid
 import traceback
 import multiprocessing
 from datetime import timedelta, datetime
+from time import sleep
 
 from django import db
 from django.utils import timezone
@@ -25,8 +26,16 @@ __all__ = ('BackupRunner',)
 logger = logging.getLogger("netbox_config_backup")
 
 job_frequency = get_plugin_config('netbox_config_backup', 'job_frequency', 5)
+backup_frequency = get_plugin_config('netbox_config_backup', 'backup_frequency', None)
 
-if backup_frequency := get_plugin_config('netbox_config_backup', 'backup_frequency', None):
+#
+# TODO: The walrus block replaces backup_frequency with the deprecated frequency when backup_frequency
+# is set, but schedule_job() never uses the resulting value. When an installation sets the new
+# interval in minutes, subsequent backups are still scheduled from the old default or legacy
+# frequency value in seconds.
+# https://app.qodo.ai/findings/947da17a-aaa5-41ef-b3b5-426820012547
+#
+if not backup_frequency:
     backup_frequency = get_plugin_config('netbox_config_backup', 'frequency', 3600)
 
 
@@ -54,6 +63,13 @@ class BackupRunner(JobRunner):
 
     @classmethod
     def fail_job(cls, jobs=None, status=JobStatusChoices.STATUS_FAILED, message=''):
+        #
+        # TODO: fail_job writes {'error': {message}} into JSON-backed job.data, making error a Python set
+        # that fails validation, and calls update() even when nullable data is null. When
+        # schedule_missed_jobs processes queued jobs for a device that cannot be backed up, this failure
+        # path cannot mark them failed and aborts the runner tick.
+        # https://app.qodo.ai/findings/f6cae681-865e-4a66-aa65-dc20aa942cd4
+        #
         for job in jobs:
             job.status = status
             job.data.update({'error': {message}})
@@ -136,7 +152,14 @@ class BackupRunner(JobRunner):
 
     @classmethod
     def get_backup_jobs(cls, backups=None):
-
+        #
+        # TODO: get_backup_jobs selects all STATUS_SCHEDULED jobs without checking
+        # scheduled__lte=timezone.now() or ordering by scheduled time before the worker limit, then marks
+        # the selected jobs pending and runs them. When schedule_job sets the next run to `completed +
+        # frequency`, an hourly job can be picked up on the next five-minute runner tick, backing up devices
+        # about 12 times more often than configured.
+        # https://app.qodo.ai/findings/a2bb3c58-b3bf-4518-842b-624fb693b444
+        #
         jobs = BackupJob.objects.filter(backup__device__isnull=False, status=JobStatusChoices.STATUS_SCHEDULED)
         if backups:
             jobs = jobs.filter(backup__in=backups)
@@ -178,6 +201,15 @@ class BackupRunner(JobRunner):
                         d = napalm_init(job.backup.device, ip)
                     except (TimeoutError, ServiceUnavailable) as e:
                         logger.debug(f'Timeout Connecting to {job.backup.device} with ip {ip}')
+                        #
+                        # TODO: run_backup() checks whether a status string belongs to
+                        # [JobStatusChoices.ENQUEUED_STATE_CHOICES], a list containing one tuple, so the check fails and
+                        # error results retain their default running status. Connection timeouts, configuration retrieval
+                        # errors, and the no-IP path are persisted as running, with exception results lacking a completion
+                        # time; schedule_job does not reschedule them, and they block schedule_missed_jobs until
+                        # clean_jobs force-fails them.
+                        # https://app.qodo.ai/findings/62b70237-7902-473a-b324-85e7379fdec3
+                        #
                         result.status = (
                             JobStatusChoices.STATUS_FAILED
                             if result.status in [JobStatusChoices.ENQUEUED_STATE_CHOICES]
@@ -198,6 +230,12 @@ class BackupRunner(JobRunner):
                             configs = d.get_config()
                             break
                         except Exception as e:
+                            #
+                            # TODO: The get_config retry loop in run_backup() calls sleep(5), but jobs/backup.py imports neither
+                            # sleep nor time. When configuration retrieval raises an exception, that call raises NameError
+                            # instead of allowing the remaining retry attempts.
+                            # https://app.qodo.ai/findings/7e715dc7-30f0-4b69-a986-9d468a2cf7c0
+                            #
                             sleep(5)
                             if i == 5:
                                 logger.error(f'{job.backup}: had error getting config: {e}')
@@ -240,6 +278,13 @@ class BackupRunner(JobRunner):
         for job in jobs:
             job.refresh_from_db()
             self.logger.debug(f'Scheduling next backup for {job.backup}')
+            #
+            # TODO: schedule_job adds the backup interval to job.completed for every terminal status, but failed
+            # results can leave completed as None, causing a TypeError. When a failed backup reaches
+            # scheduling—including through the “Cannot backup” path or a clean_jobs update—the exception aborts
+            # run before other jobs in the batch are rescheduled.
+            # https://app.qodo.ai/findings/844ac5d4-9832-4d37-b0ad-651755c102a7
+            #
             if job.status in JobStatusChoices.TERMINAL_STATE_CHOICES:
                 scheduled = job.completed + timedelta(seconds=frequency)
                 self.logger.debug(f'Elligible for: {scheduled}')
@@ -328,6 +373,12 @@ class BackupRunner(JobRunner):
             )
 
             job_start = timezone.now()
+            #
+            # TODO: run calls Backup.commit(jobs) unconditionally, even though Backup.commit raises when given an
+            # empty job list. When no jobs are scheduled or selected by a backup filter, a normal no-work run is
+            # recorded as a failure.
+            # https://app.qodo.ai/findings/8128bc13-d7e8-408b-808f-dc95dfc6f604
+            #
             # Perform the commit
             commit = Backup.commit(jobs)
             job_end = timezone.now()

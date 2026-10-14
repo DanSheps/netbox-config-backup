@@ -56,6 +56,13 @@ class BackupJobListView(ObjectListView):
     actions = ()
 
 
+#
+# TODO: BackupJobView is registered as a BackupJob detail view but subclasses ObjectListView without a
+# table, rather than ObjectView. Requests to /jobs/<pk>/ therefore use a list view instead of
+# providing the selected job as object, which the detail template needs to render object.backup
+# and object.status.
+# https://app.qodo.ai/findings/f8ba4b74-bee0-44e1-bf57-3f4a6ca81ac4
+#
 @register_model_view(BackupJob)
 class BackupJobView(ObjectListView):
     queryset = BackupJob.objects.all()

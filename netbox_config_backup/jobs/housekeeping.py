@@ -36,6 +36,13 @@ class BackupHousekeeping(JobRunner):
                     job.clean()
                     job.save()
 
+        #
+        # TODO: BackupHousekeeping.run() checks jobs.count() after iterating and updating the same queryset, so
+        # the count reflects its cached results rather than the jobs’ current statuses. When every selected
+        # runner was stale and has been marked failed, the replacement BackupRunner is not enqueued until a
+        # later housekeeping run, and the “No stale jobs” log fires despite stale jobs having existed.
+        # https://app.qodo.ai/findings/660052be-6684-4052-8d6f-fff3be5a7252
+        #
         if jobs.count() == 0:
             job = BackupRunner.enqueue(scheduled_at=timezone.now() + timedelta(minutes=5))
             logger.info(f'\tNew Backup Job Runner enqueued as {job} ({job.pk})')

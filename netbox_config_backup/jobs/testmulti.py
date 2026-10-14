@@ -16,6 +16,12 @@ __all__ = 'BackupHousekeeping'
 
 logger = logging.getLogger("netbox_config_backup")
 
+#
+# TODO: jobs/testmulti.py defines NCBTestJob (a 2-minute sleep loop) with the misleading name 'Backup
+# Housekeeping', __all__ = 'BackupHousekeeping', and unused imports. It looks like a leftover
+# debugging file that later readers will confuse with the real housekeeping job.
+# https://app.qodo.ai/findings/99acd54e-ff82-4643-a2ce-d3563e3ff5a4
+#
 class NCBTestJob(JobRunner):
 
     class Meta:

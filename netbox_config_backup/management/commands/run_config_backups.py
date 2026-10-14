@@ -25,6 +25,12 @@ class Command(BaseCommand):
                     for job in backup.jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES):
                         print(f'Clearing old jobs: {job}')
                         job.status = JobStatusChoices.STATUS_ERRORED
+                        #
+                        # TODO: n_config_backups assigns the return value of job.data.update() to job.data, even though
+                        # dict.update() returns None. When an enqueued job already has data, the command clears its
+                        # existing JSON details while marking the job errored.
+                        # https://app.qodo.ai/findings/156076b7-88f7-45d3-8687-8f229b84fbde
+                        #
                         job.data = (
                             {'error': 'Clearing stuck job'}
                             if not job.data

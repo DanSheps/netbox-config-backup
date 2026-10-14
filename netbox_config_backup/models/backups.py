@@ -98,6 +98,13 @@ class Backup(PrimaryModel):
         commits = self.update_commit_tree(depth=None)
         # print(f'Validated {len(commits)}')
         pks = [commit.pk for commit in commits]
+        #
+        # TODO: rebuild_bctc filters BackupCommitTreeChange records with pk=self.pk, comparing a change-record
+        # primary key to the Backup's id instead of selecting records owned by backup=self. When the
+        # commits management command runs the rebuild, orphaned changes for this backup remain and a change
+        # belonging to another backup can be deleted if its primary key matches.
+        # https://app.qodo.ai/findings/97677c55-083a-4500-9789-8e152004c25e
+        #
         orphan_commits = BackupCommitTreeChange.objects.filter(pk=self.pk).exclude(pk__in=pks)
         if orphan_commits.count() > 0:
             deleted = orphan_commits.delete()
@@ -138,6 +145,12 @@ class Backup(PrimaryModel):
                     sha = change.get(key, {}).get('sha', None)
                     file = change.get(key, {}).get('path', None)
                     uuid, type = file.split('.') if file is not None else (None, None)
+                    #
+                    # TODO: update_commit_tree() decides whether to record a change using the uuid left by the final loop
+                    # iteration, which checks the new path. When a Git deletion has no new path, uuid becomes None, so
+                    # a deleted running or startup file is omitted from the backup’s commit tree.
+                    # https://app.qodo.ai/findings/5a0b17fe-8dd9-440d-8d5c-3dbc79206d1f
+                    #
                     if str(uuid) != str(self.uuid):
                         # Not the change associated with this commit so exit the inner loop
                         continue

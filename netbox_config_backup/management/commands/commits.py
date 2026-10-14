@@ -50,6 +50,12 @@ class Command(BaseCommand):
         for backup in backups:
             print(f'Starting Commit Maintenance for {backup}')
             commit = self.commit_unstaged(backup)
+            # TODO: commits.handle() tests the nonempty result of options.get('action', 'commit') for truthiness in
+            # both its display and execution checks instead of comparing it with commit or rebuild. Because
+            # the default and explicit --action rebuild values are truthy, the command prints 'Committing',
+            # takes the commit branch, and never reaches rebuild_bctc.
+            # https://app.qodo.ai/findings/23ca937e-74a7-4c8d-b95b-027aece32dbb
+            #
             if options.get('action', 'commit'):
                 if commit:
                     print(f'Updating BCTC for {backup} with commit: {commit}')
