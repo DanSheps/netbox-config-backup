@@ -28,7 +28,7 @@ class TestBackup(TestCase):
             name='Test Device', device_type=device_type, role=role, site=site
         )
         backup = Backup.objects.create(name='Backup 1', device=device)
-        backup.set_config(configs)
+        backup.write_config(configs)
         retrieved = backup.get_config()
 
         self.assertEqual(configs['running'], retrieved['running'])
