@@ -42,8 +42,11 @@ class NetboxConfigBackup(PluginConfig):
             from netbox_config_backup.jobs import BackupRunner, BackupHousekeeping  # noqa: F401
 
         # Ignore Paramiko for Sentry
-        from sentry_sdk.integrations.logging import ignore_logger
-        ignore_logger("paramiko.transport")
+        try:
+            from sentry_sdk.integrations.logging import ignore_logger
+            ignore_logger("paramiko.transport")
+        except ImportError:
+            pass
 
 
 config = NetboxConfigBackup
