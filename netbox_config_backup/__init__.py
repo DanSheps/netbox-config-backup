@@ -41,5 +41,9 @@ class NetboxConfigBackup(PluginConfig):
         if len(sys.argv) > 1 and 'rqworker' in sys.argv[1]:
             from netbox_config_backup.jobs import BackupRunner, BackupHousekeeping  # noqa: F401
 
+        # Ignore Paramiko for Sentry
+        from sentry_sdk.integrations.logging import ignore_logger
+        ignore_logger("paramiko.transport")
+
 
 config = NetboxConfigBackup

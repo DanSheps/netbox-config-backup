@@ -190,10 +190,18 @@ class BackupRunner(JobRunner):
                         logger.debug(f'Checking config save status for {job.backup}')
                         result.config_save_status = check_config_save_status(d)
                     except Exception as e:
-                        logger.error(f'{job.backup}: had error setting backup status: {e}')
+                        logger.warning(f'{job.backup}: had error setting backup status: {e}')
 
                     logger.debug(f'Getting config for {job.backup}')
-                    configs = d.get_config()
+                    for i in range(1,6):
+                        try:
+                            configs = d.get_config()
+                            break
+                        except Exception as e:
+                            sleep(5)
+                            if i == 5:
+                                logger.error(f'{job.backup}: had error getting config: {e}')
+                                raise e
                     logger.debug(f'Setting config for {job.backup}')
                     result.files = job.backup.write_config(configs)
                     logger.debug(f'Wrote config for {job.backup}')
@@ -344,7 +352,7 @@ class BackupRunner(JobRunner):
             # Update the job in DB
             for result in results:
                 job = BackupJob.objects.get(pk=result.job)
-                logger.info(f'Updating job {job} with result: {result.status}')
+                self.logger.info(f'Updating job {job} with result: {result.status}')
                 job.status = result.status
                 job.completed = result.completed
                 job.data = {'files': result.files} if result.files else {}
@@ -355,7 +363,7 @@ class BackupRunner(JobRunner):
                 if result.config_save_status:
                     job.backup.config_status = result.config_save_status.get('status', False)
                 else:
-                    self.logger.info(f'Job {job} for {job.backup} cannot fetch config save status')
+                    self.logger.warning(f'Job {job} for {job.backup} cannot fetch config save status')
                     job.backup.config_status = False
                 job.backup.full_clean()
                 job.backup.save()

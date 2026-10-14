@@ -86,5 +86,4 @@ def check_config_save_status(d):
             return datetimes
 
     except Exception as e:
-
-        logger.error(f'Exception when trying to check config status: {e}')
+        logger.warning(f'Exception when trying to check config status: {e}')
