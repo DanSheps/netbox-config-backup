@@ -76,8 +76,13 @@ class Backup(PrimaryModel):
         return changes
 
     @classmethod
-    def commit(self, jobs):
-        backups = [str(job.backup) for job in jobs]
+    def commit(self, jobs = None, backups = None):
+        if not backups and not jobs:
+            raise Exception('No backups or jobs provided to commit')
+        elif not backups and jobs:
+            backups = [str(job.backup) for job in jobs]
+        else:
+            backups = [str(backup) for backup in backups]
         commit = repository.commit(
             f'Backup commit for backup jobs: {",".join(backups)} on {timezone.now()}',
         )

@@ -110,7 +110,7 @@ class BackupFilterSet(PrimaryModelFilterSet):
         except (AddrFormatError, ValueError):
             pass
 
-        return queryset.filter(qs_filter)
+        return queryset.filter(qs_filter).distinct()
 
     def filter_address(self, queryset, name, value):
         try:

@@ -73,9 +73,21 @@ class GitBackup:
         return porcelain.status(self.repository)
 
     def commit(self, message):
+        # Check for untracked or unstaged files that match the patterns for running and startup configs
         status = porcelain.status(self.repository)
-        staged = status.staged
-        if not staged.get('add') and not staged.get('delete') and not staged.get('modify'):
+        staged = []
+        for file in status.unstaged:
+            file = file.decode('ascii')
+            self.add(file)
+            staged.append(file)
+        for file in status.untracked:
+            file = file.decode('ascii')
+            self.add(file)
+            staged.append(file)
+        staged.extend(status.staged.get('add'))
+        staged.extend(status.staged.get('delete'))
+        staged.extend(status.staged.get('modify'))
+        if not staged:
             return None
 
         committer = settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('committer', None)

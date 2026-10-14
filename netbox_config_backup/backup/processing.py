@@ -22,6 +22,7 @@ def remove_stale_backupjobs(job: BackupJob):
     pass
 
 
+# TODO: Remove reference in BackupNowView and delete this function once the BackupNowView is removed
 def run_backup(job_id):
     close_db()
     logger.info(f'Starting backup for job {job_id}')
