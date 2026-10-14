@@ -20,8 +20,16 @@ class NetboxConfigBackup(PluginConfig):
         'author',
     ]
     default_settings = {
-        # Frequency in seconds
+        # Frequency in seconds (Deprecated)
         'frequency': 3600,
+        # Frequency of backups in minutes
+        'backup_frequency': 60,
+        # Frequency of the job runner in minutes
+        'job_frequency': 5,
+        # Offset for Jobs in minutes (to offset jobs after a restart)
+        'offset': 6,
+        # Number of jobs per run
+        'workers': 10,
     }
     queues = ['jobs']
     graphql_schema = 'graphql.schema.schema'
@@ -32,6 +40,13 @@ class NetboxConfigBackup(PluginConfig):
 
         if len(sys.argv) > 1 and 'rqworker' in sys.argv[1]:
             from netbox_config_backup.jobs import BackupRunner, BackupHousekeeping  # noqa: F401
+
+        # Ignore Paramiko for Sentry
+        try:
+            from sentry_sdk.integrations.logging import ignore_logger
+            ignore_logger("paramiko.transport")
+        except ImportError:
+            pass
 
 
 config = NetboxConfigBackup

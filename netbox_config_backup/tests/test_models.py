@@ -2,6 +2,7 @@ from django.test import TestCase
 
 from dcim.models import Site, Manufacturer, DeviceType, DeviceRole, Device
 from netbox_config_backup.models import *
+from netbox_config_backup.models import Backup
 
 
 class TestBackup(TestCase):
@@ -28,7 +29,10 @@ class TestBackup(TestCase):
             name='Test Device', device_type=device_type, role=role, site=site
         )
         backup = Backup.objects.create(name='Backup 1', device=device)
-        backup.set_config(configs)
+
+        changes = backup.write_config(configs)
+        commit = backup.commit(backups=[backup])
+        backup.update_commit_tree(commit=commit)
         retrieved = backup.get_config()
 
         self.assertEqual(configs['running'], retrieved['running'])

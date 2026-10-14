@@ -22,6 +22,7 @@ def remove_stale_backupjobs(job: BackupJob):
     pass
 
 
+# TODO: Remove reference in BackupNowView and delete this function once the BackupNowView is removed
 def run_backup(job_id):
     close_db()
     logger.info(f'Starting backup for job {job_id}')
@@ -119,6 +120,10 @@ def run_backup(job_id):
             d.close()
 
             logger.debug(f'Scheduling next backup for {backup}')
+            now = timezone.now()
+            job_count = Backup.objects.filter(scheduled__gt=now.replace(second=0, microsecond=0), scheduled__lt=now.replace(second=0, microsecond=0)).count()
+            if job_count >= 5:
+                now = now + timedelta(minutes=5)
             frequency = timedelta(
                 seconds=settings.PLUGINS_CONFIG.get('netbox_config_backup', {}).get('frequency', 3600)
             )
@@ -126,7 +131,7 @@ def run_backup(job_id):
                 runner=None,
                 backup=job.backup,
                 status=JobStatusChoices.STATUS_SCHEDULED,
-                scheduled=timezone.now() + frequency,
+                scheduled=now + frequency,
                 job_id=uuid.uuid4(),
                 data={},
             )

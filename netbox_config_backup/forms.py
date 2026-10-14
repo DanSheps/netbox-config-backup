@@ -6,7 +6,7 @@ from core.choices import JobStatusChoices
 from dcim.choices import DeviceStatusChoices
 from dcim.models import Device
 from ipam.models import IPAddress
-from netbox.forms import NetBoxModelForm, NetBoxModelBulkEditForm
+from netbox.forms import NetBoxModelForm, NetBoxModelBulkEditForm, NetBoxModelFilterSetForm
 from netbox_config_backup.models import Backup, BackupJob
 from utilities.forms import add_blank_choice, BOOLEAN_WITH_BLANK_CHOICES
 from utilities.forms.fields import (
@@ -14,6 +14,8 @@ from utilities.forms.fields import (
     DynamicModelMultipleChoiceField,
     CommentField,
 )
+from utilities.forms.rendering import FieldSet
+from utilities.forms.widgets import DateTimePicker
 
 __all__ = (
     'BackupForm',
@@ -72,15 +74,73 @@ class BackupForm(NetBoxModelForm):
                 )
 
 
-class BackupJobFilterSetForm(forms.Form):
+class BackupJobFilterSetForm(NetBoxModelFilterSetForm):
     model = BackupJob
-    field_order = [
-        'q',
-        'status',
-    ]
+    fieldsets = (
+        FieldSet(
+            'q',
+            'filter_id',
+            'tag',
+        ),
+        FieldSet(
+            'status',
+            'backup_id',
+        ),
+        FieldSet(
+            'created',
+            'scheduled',
+            'started',
+            'completed',
+            name=_('Dates'),
+        ),
+    )
+
     status = forms.MultipleChoiceField(
         required=False, choices=add_blank_choice(JobStatusChoices), label=_('Status')
     )
+    backup_id = DynamicModelMultipleChoiceField(
+        queryset=Backup.objects.all(),
+        required=False,
+        label=_('Backup'),
+    )
+    created = forms.DateTimeField(
+        label=_('Created'),
+        required=False,
+        widget=DateTimePicker
+    )
+    scheduled = forms.DateTimeField(
+        label=_('Scheduled'),
+        required=False,
+        widget=DateTimePicker
+    )
+    started = forms.DateTimeField(
+        label=_('Started'),
+        required=False,
+        widget=DateTimePicker
+    )
+    completed = forms.DateTimeField(
+        label=_('Completed'),
+        required=False,
+        widget=DateTimePicker
+    )
+
+    def _get_lookup_choices(self, field):
+        FORM_FIELD_LOOKUPS = [
+            ('exact', _('is')),
+            ('n', _('is not')),
+            ('gt', _('after')),
+            ('gte', _('on or after')),
+            ('lt', _('before')),
+            ('lte', _('on or before')),
+            ('empty_true', _('is empty')),
+            ('empty_false', _('is not empty')),
+        ]
+        lookups = super()._get_lookup_choices(field)
+
+        if isinstance(field, forms.DateTimeField) and not lookups:
+            return FORM_FIELD_LOOKUPS
+
+        return lookups
 
 
 class BackupFilterSetForm(forms.Form):

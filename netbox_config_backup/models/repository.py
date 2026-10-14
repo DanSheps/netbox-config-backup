@@ -73,8 +73,8 @@ class BackupCommitTreeChange(BigIDModel):
 
     commit = models.ForeignKey(to=BackupCommit, on_delete=models.PROTECT, related_name='changes')
     type = models.CharField(max_length=10)
-    old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True)
-    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True)
+    old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True, blank=True)
+    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True, blank=True)
 
     class Meta:
         ordering = ('pk',)
