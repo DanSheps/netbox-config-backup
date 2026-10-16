@@ -14,7 +14,8 @@ from core.choices import JobStatusChoices, JobIntervalChoices
 from netbox.api.exceptions import ServiceUnavailable
 from netbox.jobs import JobRunner, system_job
 from netbox.plugins import get_plugin_config
-from netbox_config_backup.choices import StatusChoices
+from netbox_config_backup.choices import FileTypeChoices
+from netbox_config_backup.choices.status import StatusChoices
 from netbox_config_backup.models import Backup, BackupJob
 from netbox_config_backup.utils.configs import check_config_save_status
 from netbox_config_backup.utils.napalm import napalm_init
@@ -28,22 +29,16 @@ logger = logging.getLogger("netbox_config_backup")
 job_frequency = get_plugin_config('netbox_config_backup', 'job_frequency', 5)
 backup_frequency = get_plugin_config('netbox_config_backup', 'backup_frequency', None)
 
-#
-# TODO: The walrus block replaces backup_frequency with the deprecated frequency when backup_frequency
-# is set, but schedule_job() never uses the resulting value. When an installation sets the new
-# interval in minutes, subsequent backups are still scheduled from the old default or legacy
-# frequency value in seconds.
-# https://app.qodo.ai/findings/947da17a-aaa5-41ef-b3b5-426820012547
-#
 if not backup_frequency:
     backup_frequency = get_plugin_config('netbox_config_backup', 'frequency', 3600)
+    backup_frequency = backup_frequency / 60  # Convert seconds to minutes
 
 
 @dataclasses.dataclass()
 class BackupResult:
     job: int
     pid: int
-    status: str = 'running'
+    status: str = FileTypeChoices.TYPE_RUNNING
     config_save_status = None
     message: str = ''
     completed: datetime = None
@@ -63,16 +58,10 @@ class BackupRunner(JobRunner):
 
     @classmethod
     def fail_job(cls, jobs=None, status=JobStatusChoices.STATUS_FAILED, message=''):
-        #
-        # TODO: fail_job writes {'error': {message}} into JSON-backed job.data, making error a Python set
-        # that fails validation, and calls update() even when nullable data is null. When
-        # schedule_missed_jobs processes queued jobs for a device that cannot be backed up, this failure
-        # path cannot mark them failed and aborts the runner tick.
-        # https://app.qodo.ai/findings/f6cae681-865e-4a66-aa65-dc20aa942cd4
-        #
         for job in jobs:
             job.status = status
-            job.data.update({'error': {message}})
+            job.data = job.data or {}
+            job.data.update({'error': message})
             job.full_clean()
         return BackupJob.objects.bulk_update(jobs, ['status', 'data'])
 
@@ -121,7 +110,10 @@ class BackupRunner(JobRunner):
         for backup in backups:
             job = None
             if not can_backup(backup):
-                jobs = backup.jobs.filter(status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES)
+                jobs = backup.jobs.filter(
+                    status__in=[JobStatusChoices.STATUS_PENDING, JobStatusChoices.STATUS_RUNNING],
+                    scheduled__lte=now.replace(second=0, microsecond=0) - timedelta(minutes=job_frequency),
+                )
                 self.logger.debug(f'Cannot backup {backup}')
                 failed = self.fail_job(jobs)
                 if counts.get('failed', 0):
@@ -160,7 +152,9 @@ class BackupRunner(JobRunner):
         # about 12 times more often than configured.
         # https://app.qodo.ai/findings/a2bb3c58-b3bf-4518-842b-624fb693b444
         #
-        jobs = BackupJob.objects.filter(backup__device__isnull=False, status=JobStatusChoices.STATUS_SCHEDULED)
+        jobs = BackupJob.objects.filter(
+            backup__device__isnull=False, status=JobStatusChoices.STATUS_SCHEDULED, scheduled__lte=timezone.now()
+        )
         if backups:
             jobs = jobs.filter(backup__in=backups)
         jobs = jobs[0 : get_plugin_config('netbox_config_backup', 'workers', 10)]
@@ -225,7 +219,7 @@ class BackupRunner(JobRunner):
                         logger.warning(f'{job.backup}: had error setting backup status: {e}')
 
                     logger.debug(f'Getting config for {job.backup}')
-                    for i in range(1,6):
+                    for i in range(1, 6):
                         try:
                             configs = d.get_config()
                             break
@@ -252,7 +246,7 @@ class BackupRunner(JobRunner):
                 logger.error(f'\t{traceback.format_exc()}')
                 result.status = (
                     JobStatusChoices.STATUS_FAILED
-                    if result.status in [JobStatusChoices.ENQUEUED_STATE_CHOICES]
+                    if result.status in JobStatusChoices.ENQUEUED_STATE_CHOICES
                     else result.status
                 )
                 result.message = f'Exception in {job_pk}: {e}'
@@ -262,14 +256,13 @@ class BackupRunner(JobRunner):
             logger.error(f'\t{traceback.format_exc()}')
             result.status = (
                 JobStatusChoices.STATUS_FAILED
-                if result.status in [JobStatusChoices.ENQUEUED_STATE_CHOICES]
+                if result.status in JobStatusChoices.ENQUEUED_STATE_CHOICES
                 else result.status
             )
             result.message = f'Exception in {job_pk}: {e}'
         return result
 
     def schedule_job(self, jobs):
-        frequency = get_plugin_config('netbox_config_backup', 'frequency', 3600)
         new_jobs = []
         counts = {
             'scheduled': 0,
@@ -286,7 +279,7 @@ class BackupRunner(JobRunner):
             # https://app.qodo.ai/findings/844ac5d4-9832-4d37-b0ad-651755c102a7
             #
             if job.status in JobStatusChoices.TERMINAL_STATE_CHOICES:
-                scheduled = job.completed + timedelta(seconds=frequency)
+                scheduled = job.completed + timedelta(minutes=backup_frequency)
                 self.logger.debug(f'Elligible for: {scheduled}')
                 new_job = BackupJob(
                     runner=None,

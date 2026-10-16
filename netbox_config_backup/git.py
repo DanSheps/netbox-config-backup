@@ -13,7 +13,7 @@ from netbox import settings
 
 __all__ = 'repository'
 
-from netbox_config_backup.helpers import get_repository_dir
+from netbox.plugins import get_plugin_config
 
 
 def encode(value, encoding):
@@ -34,7 +34,8 @@ class GitBackup:
     location = None
 
     def __init__(self):
-        self.location = get_repository_dir()
+
+        self.location = self.get_repository_dir()
 
         if os.path.exists(self.location):
             self.repository = repo.Repo(self.location)
@@ -48,15 +49,28 @@ class GitBackup:
             except OSError:
                 pass
 
+    @staticmethod
+    def get_repository_dir():
+        repository = get_plugin_config("netbox_config_backup", 'repository')
+        if repository == os.path.abspath(repository) or repository == (os.path.abspath(repository) + os.path.sep):
+            return repository
+
+        return f'{os.path.dirname(os.path.dirname(settings.BASE_DIR))}{os.path.sep}{repository}'
+
+    def _construct_path(self, file):
+        path = os.path.join(self.location, file)
+        if not os.path.realpath(path).startswith(os.path.realpath(self.location)):
+            raise ValueError("File path is outside the repository")
+        return path
+
     def add(self, file):
-        path = f'{self.location}{os.path.sep}{file}'
+        path = self._construct_path(file)
         porcelain.add(self.repository, path)
 
     def write(self, file, data):
-        path = f'{self.location}{os.path.sep}{file}'
+        path = self._construct_path(file)
         with open(path, 'w') as f:
             f.write(data)
-            f.close()
 
         failures = 0
         while failures < 10:
@@ -76,26 +90,14 @@ class GitBackup:
         # Check for untracked or unstaged files that match the patterns for running and startup configs
         status = porcelain.status(self.repository)
         staged = []
-        #
-        # TODO: GitBackup.commit() stages every unstaged and untracked path returned by repository status without
-        # applying the configuration-file restriction described in its comment. A backup run or targeted
-        # maintenance command can consequently commit files other than the intended backup's running and
-        # startup configurations.
-        # https://app.qodo.ai/findings/5836dccc-9648-48e8-b059-aad24bec37fe
-        #
         for file in status.unstaged:
-            file = file.decode('ascii')
+            if isinstance(file, bytes):
+                file = file.decode('ascii')
             self.add(file)
             staged.append(file)
         for file in status.untracked:
-            #
-            # TODO: GitBackup.commit calls file.decode('ascii') on every entry of status.untracked, but dulwich
-            # yields untracked paths as str (os.path.relpath), so this raises AttributeError. Files a device
-            # writes on its first backup are untracked, so the batch commit fails and the new device's configs
-            # never reach the repository.
-            # https://app.qodo.ai/findings/7895c08d-78bd-440f-bf6b-4fd934349b0a
-            #
-            file = file.decode('ascii')
+            if isinstance(file, bytes):
+                file = file.decode('ascii')
             self.add(file)
             staged.append(file)
         staged.extend(status.staged.get('add'))

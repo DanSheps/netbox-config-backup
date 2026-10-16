@@ -1,7 +1,7 @@
 import logging
 
 from dcim.choices import DeviceStatusChoices
-from netbox_config_backup.choices import StatusChoices
+from netbox_config_backup.choices.status import StatusChoices
 
 logger = logging.getLogger("netbox_config_backup")
 
@@ -20,9 +20,7 @@ def can_backup(backup):
         DeviceStatusChoices.STATUS_INVENTORY,
         DeviceStatusChoices.STATUS_PLANNED,
     ]:
-        logger.info(
-            f'Backup disabled for {backup} due to device status ({backup.device.status})'
-        )
+        logger.info(f'Backup disabled for {backup} due to device status ({backup.device.status})')
         return False
     elif (
         (backup.ip is None and backup.device.primary_ip is None)
@@ -33,27 +31,15 @@ def can_backup(backup):
         or backup.device.platform.napalm.napalm_driver is None
     ):
         if backup.ip is None and backup.device.primary_ip is None:
-            logger.warning(
-                f'Backup disabled for {backup} due to no primary IP ({backup.device.status})'
-            )
+            logger.warning(f'Backup disabled for {backup} due to no primary IP ({backup.device.status})')
         elif backup.device.platform is None:
-            logger.warning(
-                f'Backup disabled for {backup} due to platform not set ({backup.device.status})'
-            )
-        elif (
-            hasattr(backup.device.platform, 'napalm') is False
-            or backup.device.platform.napalm is None
-        ):
+            logger.warning(f'Backup disabled for {backup} due to platform not set ({backup.device.status})')
+        elif hasattr(backup.device.platform, 'napalm') is False or backup.device.platform.napalm is None:
             logger.warning(
                 f'Backup disabled for {backup} due to platform having no napalm config ({backup.device.status})'
             )
-        elif (
-            backup.device.platform.napalm.napalm_driver == ''
-            or backup.device.platform.napalm.napalm_driver is None
-        ):
-            logger.warning(
-                f'Backup disabled for {backup} due to napalm driver not set ({backup.device.status})'
-            )
+        elif backup.device.platform.napalm.napalm_driver == '' or backup.device.platform.napalm.napalm_driver is None:
+            logger.warning(f'Backup disabled for {backup} due to napalm driver not set ({backup.device.status})')
         return False
 
     return True

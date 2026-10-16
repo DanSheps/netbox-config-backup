@@ -12,6 +12,9 @@ class BackupCommit(BigIDModel):
 
     class Meta:
         ordering = ('pk',)
+        indexes = [
+            models.Index(fields=['sha']),
+        ]
 
     def __str__(self):
         return self.sha
@@ -58,14 +61,14 @@ class BackupFile(BigIDModel):
 class BackupCommitTreeChange(BigIDModel):
     backup = models.ForeignKey(
         to=Backup,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         null=False,
         blank=False,
         related_name='changes',
     )
     file = models.ForeignKey(
         to=BackupFile,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         null=False,
         blank=False,
         related_name='changes',
@@ -73,11 +76,15 @@ class BackupCommitTreeChange(BigIDModel):
 
     commit = models.ForeignKey(to=BackupCommit, on_delete=models.PROTECT, related_name='changes')
     type = models.CharField(max_length=10)
-    old = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='previous', null=True, blank=True)
-    new = models.ForeignKey(to=BackupObject, on_delete=models.PROTECT, related_name='changes', null=True, blank=True)
+    old = models.ForeignKey(to=BackupObject, on_delete=models.SET_NULL, related_name='previous', null=True, blank=True)
+    new = models.ForeignKey(to=BackupObject, on_delete=models.SET_NULL, related_name='changes', null=True, blank=True)
 
     class Meta:
         ordering = ('pk',)
+        indexes = [
+            models.Index(fields=['backup', 'file']),
+            models.Index(fields=['backup', 'commit']),
+        ]
 
     def __str__(self):
         return f'{self.commit.sha}-{self.type}'

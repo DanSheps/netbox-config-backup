@@ -1,7 +1,7 @@
 import logging
-import datetime
 import os
-import uuid as uuid
+import uuid
+from typing import Dict, List
 
 from django.db import models
 from django.urls import reverse
@@ -9,14 +9,13 @@ from django.utils import timezone
 
 from dcim.models import Device
 from netbox.models import PrimaryModel
+from ..choices import FileTypeChoices
 
-from netbox_config_backup.choices import StatusChoices
-from netbox_config_backup.helpers import get_repository_dir
-from ..git import repository
+from ..choices.status import StatusChoices
+from ..git import repository, GitBackup
 
 from ..querysets import BackupQuerySet
 from ..utils import Differ
-
 
 logger = logging.getLogger("netbox_config_backup")
 
@@ -24,9 +23,7 @@ logger = logging.getLogger("netbox_config_backup")
 class Backup(PrimaryModel):
     name = models.CharField(max_length=255, unique=True)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False)
-    status = models.CharField(
-        max_length=50, choices=StatusChoices, default=StatusChoices.STATUS_ACTIVE
-    )
+    status = models.CharField(max_length=50, choices=StatusChoices, default=StatusChoices.STATUS_ACTIVE)
     device = models.ForeignKey(
         to=Device,
         on_delete=models.SET_NULL,
@@ -34,10 +31,8 @@ class Backup(PrimaryModel):
         blank=True,
         null=True,
     )
-    ip = models.ForeignKey(
-        to='ipam.IPAddress', on_delete=models.SET_NULL, blank=True, null=True
-    )
-    config_status = models.BooleanField(blank=True, null=True)
+    ip = models.ForeignKey(to='ipam.IPAddress', on_delete=models.SET_NULL, blank=True, null=True)
+    config_status = models.BooleanField(default=False)
 
     objects = BackupQuerySet.as_manager()
 
@@ -50,17 +45,19 @@ class Backup(PrimaryModel):
     def __str__(self):
         return self.name
 
-    def get_config(self, index='HEAD'):
+    def get_config(self, index='HEAD') -> Dict[str, str]:
 
-        running = repository.read(f'{self.uuid}.running')
-        startup = repository.read(f'{self.uuid}.startup')
+        running = repository.read(f'{self.uuid}.{FileTypeChoices.TYPE_RUNNING}')
+        startup = repository.read(f'{self.uuid}.{FileTypeChoices.TYPE_STARTUP}')
 
         return {
-            'running': running if running is not None else '',
-            'startup': startup if startup is not None else '',
+            FileTypeChoices.TYPE_RUNNING: running if running is not None else '',
+            FileTypeChoices.TYPE_STARTUP: startup if startup is not None else '',
         }
 
-    def write_config(self, configs, files=('running', 'startup')):
+    def write_config(
+        self, configs, files=(FileTypeChoices.TYPE_RUNNING, FileTypeChoices.TYPE_STARTUP)
+    ) -> List[Dict[str, str]]:
         stored_configs = self.get_config()
         changes = []
         for file in files:
@@ -68,15 +65,14 @@ class Backup(PrimaryModel):
             current = configs.get(file) if configs.get(file) is not None else ''
             if Differ(stored, current).is_diff():
                 path = f'{repository.location}{os.path.sep}{self.uuid}.{file}'
-                changes.append({'name': f'{self.name}', 'uuid': f'{self.uuid}', f'path': f'{path}'})
+                changes.append({'name': f'{self.name}', 'uuid': f'{self.uuid}', 'path': f'{path}'})
                 with open(path, 'w') as f:
                     f.write(current)
-                    f.close()
 
         return changes
 
     @classmethod
-    def commit(self, jobs = None, backups = None):
+    def commit(self, jobs=None, backups=None):
         if not backups and not jobs:
             raise Exception('No backups or jobs provided to commit')
         elif not backups and jobs:
@@ -95,22 +91,21 @@ class Backup(PrimaryModel):
 
     def rebuild_bctc(self):
         from netbox_config_backup.models.repository import BackupCommitTreeChange
+
         commits = self.update_commit_tree(depth=None)
         # print(f'Validated {len(commits)}')
         pks = [commit.pk for commit in commits]
-        #
-        # TODO: rebuild_bctc filters BackupCommitTreeChange records with pk=self.pk, comparing a change-record
-        # primary key to the Backup's id instead of selecting records owned by backup=self. When the
-        # commits management command runs the rebuild, orphaned changes for this backup remain and a change
-        # belonging to another backup can be deleted if its primary key matches.
-        # https://app.qodo.ai/findings/97677c55-083a-4500-9789-8e152004c25e
-        #
-        orphan_commits = BackupCommitTreeChange.objects.filter(pk=self.pk).exclude(pk__in=pks)
-        if orphan_commits.count() > 0:
-            deleted = orphan_commits.delete()
-            # print(f'Deleted {deleted[0]} orphan commits')
+        orphan_bctcs = BackupCommitTreeChange.objects.filter(backup=self).exclude(pk__in=pks)
+        orphan_commits = [bctc.commit for bctc in orphan_bctcs]
 
-    def update_commit_tree(self, commit = None, depth = 1):
+        if orphan_bctcs.count() > 0:
+            deleted = orphan_bctcs.delete()
+            # print(f'Deleted {deleted[0]} orphan commits')
+        for oc in orphan_commits:
+            if oc.changes.count() == 0:
+                oc.delete()
+
+    def update_commit_tree(self, commit=None, depth=1):
         from netbox_config_backup.models.repository import (
             BackupCommit,
             BackupObject,
@@ -141,19 +136,20 @@ class Backup(PrimaryModel):
 
             for change in log.get('changes', []):
                 change_data = {}
+                uuid = None
                 for key in ['old', 'new']:
                     sha = change.get(key, {}).get('sha', None)
                     file = change.get(key, {}).get('path', None)
-                    uuid, type = file.split('.') if file is not None else (None, None)
-                    #
-                    # TODO: update_commit_tree() decides whether to record a change using the uuid left by the final loop
-                    # iteration, which checks the new path. When a Git deletion has no new path, uuid becomes None, so
-                    # a deleted running or startup file is omitted from the backup’s commit tree.
-                    # https://app.qodo.ai/findings/5a0b17fe-8dd9-440d-8d5c-3dbc79206d1f
-                    #
-                    if str(uuid) != str(self.uuid):
-                        # Not the change associated with this commit so exit the inner loop
+                    if file is None:
+                        # Continue to the next iteration without breaking
                         continue
+
+                    uuid, type = file.split('.') if file is not None else (None, None)
+                    if uuid is not None and str(uuid) != str(self.uuid):
+                        # The UUID does not match the backup UUID
+                        # Not the change associated with this commit so exit the inner loop and skip saving a BCTC
+                        # for this change
+                        break
                     try:
                         object = BackupObject.objects.get(sha=sha)
                     except BackupObject.DoesNotExist:
@@ -165,31 +161,30 @@ class Backup(PrimaryModel):
                         backupfile.save()
 
                     change_data[key] = object
-                if str(uuid) != str(self.uuid):
-                    continue
-                try:
-                    bctc = BackupCommitTreeChange.objects.get(
-                        backup=self,
-                        file=backupfiles.get(type=type),
-                        commit=bc,
-                        type=change.get('type', None),
-                        old=change_data.get('old', None),
-                        new=change_data.get('new', None),
-                    )
-                except BackupCommitTreeChange.DoesNotExist:
-                    bctc = BackupCommitTreeChange(
-                        backup=self,
-                        file=backupfiles.get(type=type),
-                        commit=bc,
-                        type=change.get('type', None),
-                        old=change_data.get('old', None),
-                        new=change_data.get('new', None),
-                    )
-                    bctc.save()
-                commits.append(bctc)
+                else:
+                    try:
+                        bctc = BackupCommitTreeChange.objects.get(
+                            backup=self,
+                            file=backupfiles.get(type=type),
+                            commit=bc,
+                            type=change.get('type', None),
+                            old=change_data.get('old', None),
+                            new=change_data.get('new', None),
+                        )
+                    except BackupCommitTreeChange.DoesNotExist:
+                        bctc = BackupCommitTreeChange(
+                            backup=self,
+                            file=backupfiles.get(type=type),
+                            commit=bc,
+                            type=change.get('type', None),
+                            old=change_data.get('old', None),
+                            new=change_data.get('new', None),
+                        )
+                        bctc.save()
+                    commits.append(bctc)
 
         return commits
 
     @classmethod
     def get_repository_dir(cls):
-        return get_repository_dir()
+        return GitBackup.get_repository_dir()

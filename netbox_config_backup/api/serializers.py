@@ -14,32 +14,47 @@ __all__ = (
 
 
 class BackupSerializer(NetBoxModelSerializer):
-    url = serializers.HyperlinkedIdentityField(
-        view_name='plugins-api:netbox_config_backup-api:backup-detail'
-    )
-    device = DeviceSerializer(nested=True, required=False, allow_null=True),
+    url = serializers.HyperlinkedIdentityField(view_name='plugins-api:netbox_config_backup-api:backup-detail')
+    device = DeviceSerializer(nested=True, required=False, allow_null=True)
     ip = IPAddressSerializer(nested=True, required=False, allow_null=True)
 
     class Meta:
         model = Backup
         fields = [
-            'id', 'url', 'display', 'name', 'device', 'ip',
-            'uuid', 'status', 'config_status',
+            'id',
+            'url',
+            'display',
+            'name',
+            'device',
+            'ip',
+            'uuid',
+            'status',
+            'config_status',
         ]
         brief_fields = ('display', 'id', 'name', 'url')
 
 
 class BackupJobSerializer(NetBoxModelSerializer):
-    url = serializers.HyperlinkedIdentityField(
-        view_name='plugins-api:netbox_config_backup-api:backup-detail'
-    )
-    runner = JobSerializer(nested=True, required=True, allow_null=False),
+    url = serializers.HyperlinkedIdentityField(view_name='plugins-api:netbox_config_backup-api:backupjob-detail')
+    runner = JobSerializer(nested=True, required=True, allow_null=False)
     backup = BackupSerializer(nested=True, required=True, allow_null=False)
 
     class Meta:
         model = BackupJob
         fields = [
-            'id', 'url', 'display', 'runner', 'backup', 'pid', 'created', 'scheduled', 'started', 'completed', 'status',
-            'data', 'status', 'job_id',
+            'id',
+            'url',
+            'display',
+            'runner',
+            'backup',
+            'pid',
+            'created',
+            'scheduled',
+            'started',
+            'completed',
+            'status',
+            'data',
+            'status',
+            'job_id',
         ]
         brief_fields = ('backup', 'display', 'id', 'runner', 'url')

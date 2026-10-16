@@ -1,5 +1,7 @@
 import logging
 
+from netbox_config_backup.choices import FileTypeChoices
+
 logger = logging.getLogger("netbox_config_backup")
 
 
@@ -12,9 +14,7 @@ def get_backup_tables(instance):
         for row in data:
             commit = row.commit
             current = row
-            previous = row.backup.changes.filter(
-                file__type=row.file.type, commit__time__lt=commit.time
-            ).last()
+            previous = row.backup.changes.filter(file__type=row.file.type, commit__time__lt=commit.time).last()
             backup = {
                 'pk': instance.pk,
                 'date': commit.time,
@@ -33,7 +33,7 @@ def get_backup_tables(instance):
     )
 
     tables = {}
-    for file in ['running', 'startup']:
+    for file in [FileTypeChoices.TYPE_RUNNING, FileTypeChoices.TYPE_STARTUP]:
         try:
             tables.update({file: get_backup_table(backups.filter(file__type=file))})
         except KeyError:

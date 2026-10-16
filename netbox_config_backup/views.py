@@ -22,7 +22,7 @@ from netbox.views.generic import (
     BulkDeleteView,
 )
 from netbox.views.generic.base import BaseMultiObjectView
-from netbox_config_backup.backup.processing import run_backup
+from netbox_config_backup.choices import FileTypeChoices
 from netbox_config_backup.filtersets import (
     BackupFilterSet,
     BackupsFilterSet,
@@ -36,6 +36,7 @@ from netbox_config_backup.forms import (
     BackupJobFilterSetForm,
 )
 from netbox_config_backup.git import GitBackup
+from netbox_config_backup.jobs import BackupRunner
 from netbox_config_backup.models import Backup, BackupJob, BackupCommitTreeChange
 from netbox_config_backup.object_actions import *
 from netbox_config_backup.tables import BackupTable, BackupsTable, BackupJobTable
@@ -56,15 +57,8 @@ class BackupJobListView(ObjectListView):
     actions = ()
 
 
-#
-# TODO: BackupJobView is registered as a BackupJob detail view but subclasses ObjectListView without a
-# table, rather than ObjectView. Requests to /jobs/<pk>/ therefore use a list view instead of
-# providing the selected job as object, which the detail template needs to render object.backup
-# and object.status.
-# https://app.qodo.ai/findings/f8ba4b74-bee0-44e1-bf57-3f4a6ca81ac4
-#
 @register_model_view(BackupJob)
-class BackupJobView(ObjectListView):
+class BackupJobView(ObjectView):
     queryset = BackupJob.objects.all()
     template_name = 'netbox_config_backup/backupjob.html'
     actions = ()
@@ -73,7 +67,6 @@ class BackupJobView(ObjectListView):
 @register_model_view(BackupJob, 'delete')
 class BackupJobDeleteView(ObjectDeleteView):
     queryset = BackupJob.objects.all()
-
 
 
 @register_model_view(Backup, name='list', path='', detail=False)
@@ -147,8 +140,8 @@ class BackupBackupsView(ObjectChildrenView):
     def get_extra_context(self, request, instance):
         return {
             'backup': instance,
-            'running': bool(request.GET.get('type') == 'running'),
-            'startup': bool(request.GET.get('type') == 'startup'),
+            FileTypeChoices.TYPE_RUNNING: bool(request.GET.get('type') == FileTypeChoices.TYPE_RUNNING),
+            FileTypeChoices.TYPE_STARTUP: bool(request.GET.get('type') == FileTypeChoices.TYPE_STARTUP),
         }
 
 
@@ -207,10 +200,10 @@ class BackupNowView(BaseMultiObjectView):
         )
         job.full_clean()
         job.save()
-        run_backup(job.id)
+        BackupRunner.enqueue(backup=backup)
 
     def get_required_permission(self):
-        return get_permission_for_model(self.queryset.model, 'view')
+        return get_permission_for_model(self.queryset.model, 'add')
 
     def get(self, request, pk):
         backup = get_object_or_404(Backup, pk=self.kwargs['pk'])
@@ -462,6 +455,6 @@ class DeviceBackupsView(ObjectChildrenView):
     def get_extra_context(self, request, instance):
         return {
             'backup': instance.backups.filter(status='active').last(),
-            'running': bool(request.GET.get('type') == 'running'),
-            'startup': bool(request.GET.get('type') == 'startup'),
+            FileTypeChoices.TYPE_RUNNING: bool(request.GET.get('type') == FileTypeChoices.TYPE_RUNNING),
+            FileTypeChoices.TYPE_STARTUP: bool(request.GET.get('type') == FileTypeChoices.TYPE_STARTUP),
         }
