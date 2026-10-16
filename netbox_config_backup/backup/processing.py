@@ -9,6 +9,7 @@ from django.utils import timezone
 from core.choices import JobStatusChoices
 from netbox import settings
 from netbox.api.exceptions import ServiceUnavailable
+from netbox_config_backup.choices import FileTypeChoices
 from netbox_config_backup.models import BackupJob, Backup
 from netbox_config_backup.utils.db import close_db
 from netbox_config_backup.utils.configs import check_config_save_status
@@ -84,14 +85,14 @@ def run_backup(job_id):
                 logger.debug(f'Checking config save status for {backup}')
                 config_save_status = check_config_save_status(d)
                 status = config_save_status.get('status')
-                running = backup.files.filter(type='running').first()
-                startup = backup.files.filter(type='startup').first()
-                if running.last_change != config_save_status.get('running', None):
-                    running.last_change = config_save_status.get('running', None)
+                running = backup.files.filter(type=FileTypeChoices.TYPE_RUNNING).first()
+                startup = backup.files.filter(type=FileTypeChoices.TYPE_STARTUP).first()
+                if running.last_change != config_save_status.get(FileTypeChoices.TYPE_RUNNING, None):
+                    running.last_change = config_save_status.get(FileTypeChoices.TYPE_RUNNING, None)
                     running.clean()
                     running.save()
-                if startup.last_change != config_save_status.get('startup', None):
-                    startup.last_change = config_save_status.get('startup', None)
+                if startup.last_change != config_save_status.get(FileTypeChoices.TYPE_STARTUP, None):
+                    startup.last_change = config_save_status.get(FileTypeChoices.TYPE_STARTUP, None)
                     startup.clean()
                     startup.save()
 
@@ -121,7 +122,9 @@ def run_backup(job_id):
 
             logger.debug(f'Scheduling next backup for {backup}')
             now = timezone.now()
-            job_count = Backup.objects.filter(scheduled__gt=now.replace(second=0, microsecond=0), scheduled__lt=now.replace(second=0, microsecond=0)).count()
+            job_count = Backup.objects.filter(
+                scheduled__gt=now.replace(second=0, microsecond=0), scheduled__lt=now.replace(second=0, microsecond=0)
+            ).count()
             if job_count >= 5:
                 now = now + timedelta(minutes=5)
             frequency = timedelta(
