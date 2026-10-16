@@ -40,9 +40,12 @@ class GitBackup:
         try:
             # Try to open existing repository
             self.repository = repo.Repo(self.location)
-        except (repo.NotGitRepository, FileNotFoundError):
+        except FileNotFoundError:
             # If directory doesn't exist or isn't a valid git repo, initialize it
             self.repository = repo.Repo.init(path=self.location, mkdir=True)
+        except repo.NotGitRepository:
+            # If the directory exists but isn't a git repo, initialize it
+            self.repository = repo.Repo.init(path=self.location)
 
         if self.repository is not None:
             try:

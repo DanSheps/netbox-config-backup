@@ -10,20 +10,22 @@ from netbox_config_backup.git import GitBackup
 class TestGitRepository(TestCase):
     """Tests for Git repository operations"""
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         """Set up a temporary repository for testing"""
         # Create temp directory
-        self.temp_dir = tempfile.mkdtemp()
+        cls.temp_dir = tempfile.mkdtemp()
 
         # Mock get_repository_dir to return temp dir
-        self.patcher = patch.object(GitBackup, 'get_repository_dir', return_value=self.temp_dir)
-        self.mock_get_repo_dir = self.patcher.start()
+        cls.patcher = patch.object(GitBackup, 'get_repository_dir', return_value=cls.temp_dir)
+        cls.mock_get_repo_dir = cls.patcher.start()
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         """Clean up temporary repository"""
-        self.patcher.stop()
-        if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
+        cls.patcher.stop()
+        if os.path.exists(cls.temp_dir):
+            shutil.rmtree(cls.temp_dir)
 
     def test_git_backup_initialization(self):
         """Test GitBackup initializes repository correctly"""
@@ -107,4 +109,3 @@ class TestGitRepository(TestCase):
         # Get status - should track the new file
         status = git_backup.status()
         self.assertIsNotNone(status, "Status should return repository status")
-
