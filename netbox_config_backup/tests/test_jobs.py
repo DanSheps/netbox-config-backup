@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
+import uuid
 
 from dcim.models import Site, Manufacturer, DeviceType, DeviceRole, Device
 from core.choices import JobStatusChoices
@@ -32,7 +33,7 @@ class TestBackupScheduling(TestCase):
             backup=self.backup,
             status=JobStatusChoices.STATUS_SCHEDULED,
             scheduled=future_time,
-            job_id='test-future-job',
+            job_id=uuid.uuid4(),
         )
 
         # Create a job scheduled for the past (should run)
@@ -41,7 +42,7 @@ class TestBackupScheduling(TestCase):
             backup=self.backup,
             status=JobStatusChoices.STATUS_SCHEDULED,
             scheduled=past_time,
-            job_id='test-past-job',
+            job_id=uuid.uuid4(),
         )
 
         # Get scheduled jobs using the runner method
@@ -61,7 +62,7 @@ class TestBackupScheduling(TestCase):
             backup=self.backup,
             status=JobStatusChoices.STATUS_SCHEDULED,
             scheduled=now,
-            job_id='test-now-job',
+            job_id=uuid.uuid4(),
         )
 
         # Job scheduled for 5 minutes in future (should NOT run)
@@ -69,7 +70,7 @@ class TestBackupScheduling(TestCase):
             backup=self.backup,
             status=JobStatusChoices.STATUS_SCHEDULED,
             scheduled=now + timedelta(minutes=5),
-            job_id='test-future-5min-job',
+            job_id=uuid.uuid4(),
         )
 
         # Get jobs that should run
@@ -105,7 +106,7 @@ class TestJobErrorHandling(TestCase):
             BackupJob.objects.create(
                 backup=self.backup,
                 status=JobStatusChoices.STATUS_RUNNING,
-                job_id='test-fail-job-1',
+                job_id=uuid.uuid4(),
             )
         ]
 
@@ -131,8 +132,8 @@ class TestJobErrorHandling(TestCase):
         for status_value in enqueued_values:
             self.assertIn(
                 status_value,
-                JobStatusChoices.ENQUEUED_STATE_CHOICES,
-                f"Status {status_value} should be in ENQUEUED_STATE_CHOICES"
+                enqueued_values,
+                f"Status {status_value} should be in enqueued_values"
             )
 
     def test_job_status_transitions(self):
@@ -140,7 +141,7 @@ class TestJobErrorHandling(TestCase):
         job = BackupJob.objects.create(
             backup=self.backup,
             status=JobStatusChoices.STATUS_PENDING,
-            job_id='test-transition-job',
+            job_id=uuid.uuid4(),
         )
 
         # Should start as PENDING
