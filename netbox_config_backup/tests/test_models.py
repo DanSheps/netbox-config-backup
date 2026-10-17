@@ -48,10 +48,12 @@ class TestBackup(TestCase):
         # Add configs and commits to both
         configs = {FileTypeChoices.TYPE_RUNNING: 'Config 1', FileTypeChoices.TYPE_STARTUP: 'Startup 1'}
         backup1.write_config(configs)
+        Backup.commit(backups=[backup1])
         backup1.update_commit_tree()
 
         configs2 = {FileTypeChoices.TYPE_RUNNING: 'Config 2', FileTypeChoices.TYPE_STARTUP: 'Startup 2'}
         backup2.write_config(configs2)
+        Backup.commit(backups=[backup2])
         backup2.update_commit_tree()
 
         # Get BCTC counts before rebuild
@@ -66,8 +68,11 @@ class TestBackup(TestCase):
 
         # Check that backup2's changes were not affected
         bctc_count_backup2_after = BackupCommitTreeChange.objects.filter(backup=backup2).count()
-        self.assertEqual(bctc_count_backup2_before, bctc_count_backup2_after,
-                        "rebuild_bctc on backup1 should not delete backup2's changes")
+        self.assertEqual(
+            bctc_count_backup2_before,
+            bctc_count_backup2_after,
+            "rebuild_bctc on backup1 should not delete backup2's changes",
+        )
 
     def test_update_commit_tree_handles_deleted_files(self):
         """File deletions should be recorded in commit tree (Bug #2 from issue 1.2)"""
@@ -81,17 +86,21 @@ class TestBackup(TestCase):
         # Write initial configs
         configs = {FileTypeChoices.TYPE_RUNNING: 'Initial Config', FileTypeChoices.TYPE_STARTUP: 'Initial Startup'}
         backup.write_config(configs)
+        Backup.commit(backups=[backup])
         commits1 = backup.update_commit_tree()
 
         initial_count = len(commits1)
         self.assertGreater(initial_count, 0, "Should have created BCTC entries")
 
         # Update configs (simulating file changes)
-        configs_updated = {FileTypeChoices.TYPE_RUNNING: 'Updated Config', FileTypeChoices.TYPE_STARTUP: 'Updated Startup'}
+        configs_updated = {
+            FileTypeChoices.TYPE_RUNNING: 'Updated Config',
+            FileTypeChoices.TYPE_STARTUP: 'Updated Startup',
+        }
         backup.write_config(configs_updated)
+        Backup.commit(backups=[backup])
         commits2 = backup.update_commit_tree()
 
         # Both running and startup should be recorded even if one was deleted in a previous version
         final_count = len(commits2)
         self.assertGreater(final_count, 0, "Should record file deletions in commit tree")
-

@@ -63,6 +63,8 @@ class TestGitRepository(TestCase):
             'device2.startup': 'Startup config 2',
         }
 
+        old_repo_files = os.listdir(git_backup.location)
+
         for filename, content in files.items():
             git_backup.write(filename, content)
 
@@ -72,7 +74,7 @@ class TestGitRepository(TestCase):
             self.assertTrue(os.path.exists(filepath), f"File {filename} should exist")
 
         # Verify directory structure is correct
-        repo_files = os.listdir(git_backup.location)
+        repo_files = list(set(os.listdir(git_backup.location)) - set(old_repo_files))
         self.assertEqual(len([f for f in repo_files if f.endswith('.running')]), 2)
         self.assertEqual(len([f for f in repo_files if f.endswith('.startup')]), 2)
 
