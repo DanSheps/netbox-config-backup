@@ -20,7 +20,25 @@ keywords = ["netbox-plugin", ]
 version = "2.2.3"
 license = {file = "LICENSE"}
 classifiers = [
+    'Development Status :: 4 - Beta',
+    'Framework :: Django',
+    'Framework :: Django 6',
+    'Framework :: Django 6.0',
+    'Framework :: Django 6.1',
+    'Intended Audience :: Developers',
+    'Intended Audience :: Information Technology',
+    'Intended Audience :: System Administrators',
+    'Intended Audience :: Telecommunications Industry',
+    'License :: OSI Approved :: Apache Software License',
+    'Natural Language :: English',
     "Programming Language :: Python :: 3",
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
+    'Topic :: System',
+    'Topic :: System :: Archiving :: Backup',
+    'Topic :: System :: Networking',
+    'Topic :: System :: Networking :: Firewalls',
 ]
 dependencies = [
     'netbox-napalm-plugin',
