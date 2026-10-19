@@ -1,5 +1,11 @@
 # Netbox Configuration Backup
 
+[![PyPI](https://img.shields.io/pypi/v/netbox-config-backup.svg)](https://pypi.org/project/netbox-config-backup/)
+[![Python](https://img.shields.io/pypi/pyversions/netbox-config-backup.svg)](https://pypi.org/project/netbox-config-backup/)
+[![NetBox](https://img.shields.io/badge/NetBox-4.7%2B-success.svg)](https://github.com/netbox-community/netbox)
+[![CI](https://github.com/dansheps/netbox-config-backup/actions/workflows/ci.yml/badge.svg)](https://github.com/dansheps/netbox-config-backup/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 A configuration backup system using netbox and napalm to backup devices into a git repository
 
 # Features
